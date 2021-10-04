@@ -5,3 +5,5 @@ gen.*
 .settings/
 .vs/
 build/
+compile_commands.json
+.cache
