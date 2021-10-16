@@ -56,18 +56,11 @@ static void yyerror(idl_location_t *, idl_pstate_t *, idl_retcode_t *, const cha
 #define YYLLOC_DEFAULT(Cur, Rhs, N) \
   do { \
     if (N) { \
-      (Cur).first.source = YYRHSLOC(Rhs, 1).first.source; \
-      (Cur).first.file = YYRHSLOC(Rhs, 1).first.file; \
-      (Cur).first.line = YYRHSLOC(Rhs, 1).first.line; \
-      (Cur).first.column = YYRHSLOC(Rhs, 1).first.column; \
+      (Cur).first = YYRHSLOC(Rhs, 1).first; \
     } else { \
-      (Cur).first.source = YYRHSLOC(Rhs, 0).last.source; \
-      (Cur).first.file = YYRHSLOC(Rhs, 0).last.file; \
-      (Cur).first.line = YYRHSLOC(Rhs, 0).last.line; \
-      (Cur).first.column = YYRHSLOC(Rhs, 0).last.column; \
+      (Cur).first = YYRHSLOC(Rhs, 0).last; \
     } \
-    (Cur).last.line = YYRHSLOC(Rhs, N).last.line; \
-    (Cur).last.column = YYRHSLOC(Rhs, N).last.column; \
+    (Cur).last = YYRHSLOC(Rhs, N).last; \
   } while(0)
 
 #define TRY_EXCEPT(action, except) \
@@ -819,8 +812,12 @@ case_label:
   ;
 
 element_spec:
-    type_spec declarator
-      { TRY(idl_create_case(pstate, LOC(@1.first, @2.last), $1, $2, &$$)); }
+    /* some annotations may also occur on the union branch definitions (@id, @hashid, @external, @try_construct)
+       as defined in [XTypes v1.3] Table 21 */
+    annotations type_spec declarator
+      { TRY(idl_create_case(pstate, LOC(@1.first, @3.last), $2, $3, &$$));
+        TRY_EXCEPT(idl_annotate(pstate, $$, $1), free($$));
+      }
   ;
 
 enum_dcl: enum_def { $$ = $1; } ;

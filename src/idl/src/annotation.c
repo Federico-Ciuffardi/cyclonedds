@@ -21,6 +21,7 @@
 #include "annotation.h"
 #include "expression.h"
 #include "hashid.h"
+#include "fieldid.h"
 #include "tree.h"
 
 static idl_retcode_t
@@ -30,30 +31,41 @@ annotate_id(
   idl_node_t *node)
 {
   idl_literal_t *literal;
+  idl_declarator_t *decl = NULL;
 
   assert(annotation_appl);
   assert(annotation_appl->parameters);
   literal = (idl_literal_t *)annotation_appl->parameters->const_expr;
   assert(idl_mask(literal) == (IDL_LITERAL|IDL_ULONG));
 
-  if (idl_mask(node) & IDL_MEMBER) {
-    idl_member_t *member = (idl_member_t *)node;
-    if (idl_next(member->declarators)) {
-      idl_error(pstate, idl_location(annotation_appl),
-        "@id cannot be applied to members with multiple declarators");
-      return IDL_RETCODE_SEMANTIC_ERROR;
-    } else if (member->id.annotation) {
-      idl_error(pstate, idl_location(annotation_appl),
-        "@id conflicts with earlier annotation");
-      return IDL_RETCODE_SEMANTIC_ERROR;
-    }
-    member->id.annotation = annotation_appl;
-    member->id.value = literal->value.uint32;
+  if (idl_is_member(node)) {
+    decl = ((idl_member_t *)node)->declarators;
+  } else if (idl_is_case(node)) {
+    decl = ((idl_case_t*)node)->declarator;
   } else {
     idl_error(pstate, idl_location(annotation_appl),
-      "@id cannot be applied to %s elements", idl_construct(node));
+      "@id cannot be applied to '%s' elements", idl_construct(node));
     return IDL_RETCODE_SEMANTIC_ERROR;
   }
+
+  assert(decl);
+
+  if (idl_next(decl)) {
+    idl_error(pstate, idl_location(annotation_appl),
+      "@id cannot be applied to multiple declarators simultaneously");
+    return IDL_RETCODE_SEMANTIC_ERROR;
+  } else if ((literal->value.uint32 & ~IDL_FIELDID_MASK) != 0) {
+    idl_error(pstate, idl_location(annotation_appl),
+      "@id '0x%"PRIx32"' is out of valid range", literal->value.uint32);
+    return IDL_RETCODE_SEMANTIC_ERROR;
+  } else if (decl->id.annotation) {
+    idl_error(pstate, idl_location(annotation_appl),
+      "@id conflicts with earlier annotation");
+    return IDL_RETCODE_SEMANTIC_ERROR;
+  }
+
+  decl->id.annotation = annotation_appl;
+  decl->id.value = (literal->value.uint32 & IDL_FIELDID_MASK);
 
   return IDL_RETCODE_OK;
 }
@@ -65,6 +77,7 @@ annotate_hashid(
   idl_node_t *node)
 {
   const char *name = NULL;
+  idl_declarator_t *decl = NULL;
 
   assert(annotation_appl);
   if (annotation_appl->parameters) {
@@ -73,26 +86,33 @@ annotate_hashid(
     name = literal->value.str;
   }
 
-  if (idl_mask(node) & IDL_MEMBER) {
-    idl_member_t *member = (idl_member_t *)node;
-    if (idl_next(member->declarators)) {
-      idl_error(pstate, idl_location(annotation_appl),
-        "@hashid cannot be applied to members with multiple declarators");
-      return IDL_RETCODE_SEMANTIC_ERROR;
-    } else if (member->id.annotation) {
-      idl_error(pstate, idl_location(annotation_appl),
-        "@hashid conflicts with earlier annotation");
-      return IDL_RETCODE_SEMANTIC_ERROR;
-    }
-    if (!name)
-      name = member->declarators->name->identifier;
-    member->id.annotation = annotation_appl;
-    member->id.value = idl_hashid(name);
+  if (idl_is_member(node)) {
+    decl = ((idl_member_t *)node)->declarators;
+  } else if (idl_is_case(node)) {
+    decl = ((idl_case_t*)node)->declarator;
   } else {
     idl_error(pstate, idl_location(annotation_appl),
       "@hashid cannot be applied to '%s' elements", idl_construct(node));
     return IDL_RETCODE_SEMANTIC_ERROR;
   }
+
+  assert(decl);
+
+  if (idl_next(decl)) {
+    idl_error(pstate, idl_location(annotation_appl),
+      "@hashid cannot be applied to multiple declarators simultaneously");
+    return IDL_RETCODE_SEMANTIC_ERROR;
+  } else if (decl->id.annotation) {
+    idl_error(pstate, idl_location(annotation_appl),
+      "@hashid conflicts with earlier annotation");
+    return IDL_RETCODE_SEMANTIC_ERROR;
+  }
+
+  if (!name)
+    name = decl->name->identifier;
+
+  decl->id.annotation = annotation_appl;
+  decl->id.value = idl_hashid(name);
 
   return IDL_RETCODE_OK;
 }
@@ -107,19 +127,28 @@ annotate_autoid(
   const char *enumerator;
 
   assert(annotation_appl);
-  assert(annotation_appl->parameters);
   if (annotation_appl->parameters) {
     enumerator = idl_identifier(annotation_appl->parameters->const_expr);
     if (strcmp(enumerator, "HASH") == 0) {
       autoid = IDL_HASH;
-    } else if (strcmp(enumerator, "SEQUENTIAL") == 0) {
+    } else {
+      assert (strcmp(enumerator, "SEQUENTIAL") == 0);
       autoid = IDL_SEQUENTIAL;
     }
   }
 
   if (idl_is_struct(node)) {
-    ((idl_struct_t *)node)->autoid.annotation = annotation_appl;
-    ((idl_struct_t *)node)->autoid.value = autoid;
+    idl_struct_t *str = (idl_struct_t *)node;
+    str->autoid.annotation = annotation_appl;
+    str->autoid.value = autoid;
+  } else if (idl_is_union(node)) {
+    idl_union_t *u = (idl_union_t *)node;
+    u->autoid.annotation = annotation_appl;
+    u->autoid.value = autoid;
+  } else if (idl_is_module(node)) {
+    idl_module_t *mod = (idl_module_t *)node;
+    mod->autoid.annotation = annotation_appl;
+    mod->autoid.value = autoid;
   } else {
     idl_error(pstate, idl_location(annotation_appl),
       "@autoid cannot be applied to '%s' elements", idl_construct(node));

@@ -22,6 +22,8 @@
 #include "tree.h"
 #include "scope.h"
 #include "symbol.h"
+#include "hashid.h"
+#include "fieldid.h"
 
 void *idl_push_node(void *list, void *node)
 {
@@ -981,6 +983,191 @@ static const char *describe_struct(const void *ptr)
   (void)ptr;
   assert(idl_mask(ptr) & IDL_STRUCT);
   return "struct";
+}
+
+static int compare_declarator(const void *lhs, const void *rhs)
+{
+  const idl_declarator_t *d_lhs = *(const idl_declarator_t **)lhs,
+                         *d_rhs = *(const idl_declarator_t **)rhs;
+  if (d_lhs->id.value < d_rhs->id.value)
+    return -1;
+  else if (d_lhs->id.value > d_rhs->id.value)
+    return 1;
+  else
+    return 0;
+}
+
+static void
+assign_id(
+  idl_declarator_t *declarator,
+  const idl_declarator_t *last,
+  idl_autoid_t autoid)
+{
+  assert(declarator);
+
+  /* id assigned through @id or @hashid annotation */
+  if (declarator->id.annotation)
+    return;
+
+  assert(declarator->name);
+  assert(declarator->name->identifier);
+
+  if (autoid == IDL_HASH)
+    declarator->id.value = idl_hashid(declarator->name->identifier);
+  else if (last) /* identifiers silently overflow */
+    declarator->id.value = (last->id.value + 1) & IDL_FIELDID_MASK;
+  else
+    declarator->id.value = 0u;
+}
+
+static idl_declarator_t *
+next_member(const void *node, const idl_declarator_t *declarator)
+{
+  const idl_struct_t *derived = node;
+
+  assert(idl_type(node) == IDL_STRUCT);
+  if (!declarator) {
+    /* iteration is depth first, see if struct is derived */
+    while (derived && derived->inherit_spec)
+      derived = derived->inherit_spec->base;
+  } else if (declarator->node.next) {
+    return (idl_declarator_t *)declarator->node.next;
+  } else {
+    const idl_struct_t *base;
+    const idl_member_t *member = (const idl_member_t *)declarator->node.parent;
+    assert(member);
+    if (member->node.next)
+      return (idl_declarator_t *)((const idl_member_t *)member->node.next)->declarators;
+    base = (const idl_struct_t *)member->node.parent;
+    if (base == node)
+      return NULL;
+    while (derived->inherit_spec && derived->inherit_spec->base != base)
+      derived = derived->inherit_spec->base;
+  }
+
+  assert(derived);
+  /* (intermediate) structs without members are supported in IDL4 */
+  while (!derived->members && derived != node) {
+    const idl_struct_t *base = derived;
+    derived = node;
+    while (derived->inherit_spec && derived->inherit_spec->base != base)
+      derived = derived->inherit_spec->base;
+  }
+  assert(derived);
+  if (!derived->members)
+    return NULL;
+
+  return (idl_declarator_t *)derived->members->declarators;
+}
+
+/* FIXME: does not take into account single inheritance for union types as
+          introduced by the DDS-XTypes specification section  7.2.2.4.5 */
+static idl_declarator_t *
+next_case(const void *node, const idl_declarator_t *declarator)
+{
+  const idl_case_t *branch;
+
+  assert(idl_type(node) == IDL_UNION);
+  if (!declarator)
+    return ((const idl_union_t *)node)->cases->declarator;
+  assert(!declarator->node.next);
+  branch = (const idl_case_t *)declarator->node.parent;
+  assert(branch);
+  branch = (const idl_case_t *)branch->node.next;
+  if (!branch)
+    return NULL;
+
+  return (idl_declarator_t *)branch->declarator;
+}
+
+static idl_retcode_t
+assign_field_ids(idl_pstate_t *pstate, void *node)
+{
+  idl_retcode_t ret = IDL_RETCODE_OK;
+  idl_autoid_t autoid = IDL_SEQUENTIAL;
+  idl_declarator_t *declarator = NULL, *last = NULL;
+  idl_declarator_t **sorted = NULL; /* not "const" to silence MSVC */
+  idl_declarator_t *(*iterate)(const void *, const idl_declarator_t *);
+  size_t length = 0;
+
+  switch (idl_type(node)) {
+    case IDL_UNION:
+      autoid = ((const idl_union_t *)node)->autoid.value;
+      iterate = &next_case;
+      break;
+    default:
+      assert(idl_type(node) == IDL_STRUCT);
+      /* structs without members are supported in IDL4 */
+      if (!((const idl_struct_t *)node)->members)
+        return IDL_RETCODE_OK;
+      autoid = ((const idl_struct_t *)node)->autoid.value;
+      iterate = &next_member;
+      break;
+  }
+
+  /* assign field identifiers */
+  while ((declarator = iterate(node, declarator))) {
+    assert(declarator->node.parent);
+    if (((const idl_node_t *)declarator->node.parent)->parent == node)
+      assign_id(declarator, last, autoid);
+    last = declarator;
+    length++;
+  }
+
+  /* theoretically there are no fields to assign identifiers to */
+  if (!length)
+    return IDL_RETCODE_OK;
+
+  /* check for duplicate field identifiers */
+  if (!(sorted = malloc(length * sizeof(*sorted))))
+    return IDL_RETCODE_NO_MEMORY;
+
+  assert(!declarator);
+  for (size_t count=0; (declarator = iterate(node, declarator)); count++)
+    sorted[count] = declarator;
+  qsort(sorted, length, sizeof(*sorted), &compare_declarator);
+
+  for (size_t count=1; count < length; count++) {
+    if (sorted[count-1]->id.value == sorted[count]->id.value) {
+      idl_error(pstate, idl_location(sorted[count]),
+        "Field id '0x%.07x' is already assigned", sorted[count]->id.value);
+      ret = IDL_RETCODE_SEMANTIC_ERROR;
+      break;
+    }
+  }
+
+  free(sorted);
+  return ret;
+}
+
+idl_retcode_t
+idl_propagate_autoid(idl_pstate_t *pstate, void *list, idl_autoid_t autoid)
+{
+  idl_retcode_t ret = IDL_RETCODE_OK;
+
+  assert(pstate);
+  assert(list);
+
+  for (; ret == IDL_RETCODE_OK && list; list = idl_next(list)) {
+    if (idl_mask(list) == IDL_MODULE) {
+      idl_module_t *node = list;
+      if (!node->autoid.annotation)
+        node->autoid.value = autoid;
+      ret = idl_propagate_autoid(pstate, node->definitions, node->autoid.value);
+    } else if (idl_mask(list) == IDL_STRUCT) {
+      idl_struct_t *node = list;
+      if (!node->autoid.annotation)
+        node->autoid.value = autoid;
+      ret = assign_field_ids(pstate, node);
+    } else if (idl_mask(list) == IDL_UNION) {
+      idl_union_t *node = list;
+      if (!node->autoid.annotation)
+        node->autoid.value = autoid;
+      ret = assign_field_ids(pstate, node);
+    }
+  }
+
+  return ret;
 }
 
 idl_retcode_t
