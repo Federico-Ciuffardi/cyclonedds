@@ -41,13 +41,15 @@
 dds_return_t
 ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 {
-  printf("ddsrt_socket\n");
 
   ddsrt_socket_t sock;
 
   assert(sockptr != NULL);
 
   sock = socket(domain, type, protocol);
+
+  printf("%d : ddsrt_socket\n", sock);
+
   if (sock != -1) {
     *sockptr = sock;
     return DDS_RETCODE_OK;
@@ -75,6 +77,7 @@ dds_return_t
 ddsrt_close(
   ddsrt_socket_t sock)
 {
+  printf("%d : ddsrt_close\n", sock);
   if (close(sock) != -1)
     return DDS_RETCODE_OK;
 
@@ -96,6 +99,7 @@ ddsrt_bind(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
+  printf("%d : ddsrt_bind\n", sock);
   if (bind(sock, addr, addrlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -120,6 +124,7 @@ ddsrt_listen(
   ddsrt_socket_t sock,
   int backlog)
 {
+  printf("%d : ddsrt_listen\n", sock);
   if (listen(sock, backlog) == 0)
     return DDS_RETCODE_OK;
 
@@ -144,6 +149,7 @@ ddsrt_connect(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
+  printf("%d : ddsrt_connect\n", sock);
   if (connect(sock, addr, addrlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -187,6 +193,7 @@ ddsrt_accept(
   socklen_t *addrlen,
   ddsrt_socket_t *connptr)
 {
+  printf("%d : ddsrt_accept\n", sock);
   ddsrt_socket_t conn;
 
   if ((conn = accept(sock, addr, addrlen)) != -1) {
@@ -233,22 +240,23 @@ ddsrt_getsockname(
   struct sockaddr *addr,
   socklen_t *addrlen)
 {
-  if (getsockname(sock, addr, addrlen) == 0)
-    return DDS_RETCODE_OK;
+    printf("%d : ddsrt_getsockname\n", sock);
+    if (getsockname(sock, addr, addrlen) == 0)
+      return DDS_RETCODE_OK;
 
-  switch (errno) {
-    case EBADF:
-    case EFAULT:
-    case EINVAL:
-    case ENOTSOCK:
-      return DDS_RETCODE_BAD_PARAMETER;
-    case ENOBUFS:
-      return DDS_RETCODE_OUT_OF_RESOURCES;
-    default:
-      break;
-  }
+    switch (errno) {
+      case EBADF:
+      case EFAULT:
+      case EINVAL:
+      case ENOTSOCK:
+        return DDS_RETCODE_BAD_PARAMETER;
+      case ENOBUFS:
+        return DDS_RETCODE_OUT_OF_RESOURCES;
+      default:
+        break;
+    }
 
-  return DDS_RETCODE_ERROR;
+    return DDS_RETCODE_ERROR;
 }
 
 dds_return_t
@@ -259,6 +267,7 @@ ddsrt_getsockopt(
   void *optval,
   socklen_t *optlen)
 {
+  printf("%d : ddsrt_getsockopt\n", sock);
 #if LWIP_SOCKET
   if (optname == SO_SNDBUF || optname == SO_RCVBUF)
     return DDS_RETCODE_BAD_PARAMETER;
@@ -293,6 +302,7 @@ ddsrt_setsockopt(
   const void *optval,
   socklen_t optlen)
 {
+  printf("%d : ddsrt_setsockopt\n", sock);
 #if LWIP_SOCKET
   if (optname == SO_SNDBUF || optname == SO_RCVBUF)
     return DDS_RETCODE_BAD_PARAMETER;
@@ -347,6 +357,7 @@ ddsrt_setsocknonblocking(
   ddsrt_socket_t sock,
   bool nonblock)
 {
+  printf("%d : ddsrt_setsocknonblocking\n", sock);
   int flags;
 
   flags = fcntl(sock, F_GETFL, 0);
@@ -417,6 +428,8 @@ ddsrt_recv(
   int flags,
   ssize_t *rcvd)
 {
+  printf("%d : ddsrt_recv\n", sock);
+
   ssize_t n;
 
   if ((n = recv(sock, buf, len, flags)) != -1) {
@@ -431,6 +444,7 @@ ddsrt_recv(
 #if LWIP_SOCKET && !defined(recvmsg)
 static ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
 {
+  printf("%d : ddsrt_recvmsg\n", sock);
   assert(msg->msg_iovlen == 1);
   assert(msg->msg_controllen == 0);
 
@@ -453,15 +467,16 @@ ddsrt_recvmsg(
   int flags,
   ssize_t *rcvd)
 {
-  ssize_t n;
+    printf("%d : ddsrt_recvmsg\n", sock);
+    ssize_t n;
 
-  if ((n = recvmsg(sock, msg, flags)) != -1) {
-    assert(n >= 0);
-    *rcvd = n;
-    return DDS_RETCODE_OK;
-  }
+    if ((n = recvmsg(sock, msg, flags)) != -1) {
+      assert(n >= 0);
+      *rcvd = n;
+      return DDS_RETCODE_OK;
+    }
 
-  return recv_error_to_retcode(errno);
+    return recv_error_to_retcode(errno);
 }
 
 static inline dds_return_t
@@ -515,6 +530,8 @@ ddsrt_send(
   int flags,
   ssize_t *sent)
 {
+  printf("%d : ddsrt_send\n", sock);
+
   ssize_t n;
 
   if ((n = send(sock, buf, len, flags)) != -1) {
@@ -533,6 +550,13 @@ ddsrt_sendmsg(
   int flags,
   ssize_t *sent)
 {
+  struct sockaddr_in sin; 
+  socklen_t len = sizeof(sin); 
+  if (getsockname(sock, (struct sockaddr *)&sin, &len) == -1){
+      perror("getsockname"); 
+  }
+
+  printf("%d - %d : ddsrt_sendmsg\n", sock, ntohs(sin.sin_port));
   ssize_t n;
 
   if ((n = sendmsg(sock, msg, flags)) != -1) {
@@ -553,6 +577,8 @@ ddsrt_select(
   dds_duration_t reltime,
   int32_t *ready)
 {
+  printf("ddsrt_select\n");
+
   int n;
   struct timeval tv, *tvp = NULL;
 

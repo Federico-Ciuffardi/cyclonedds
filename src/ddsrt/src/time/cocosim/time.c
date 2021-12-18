@@ -22,7 +22,7 @@
 
 dds_time_t dds_time(void)
 {
-  printf("dds_time\n");
+  /* printf("dds_time\n"); */
   struct timespec ts;
   (void)clock_gettime(CLOCK_REALTIME, &ts);
   return (ts.tv_sec * DDS_NSECS_IN_SEC) + ts.tv_nsec;
