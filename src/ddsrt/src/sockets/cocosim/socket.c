@@ -46,9 +46,8 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 
   assert(sockptr != NULL);
 
+  printf("DDS | socket(%d, %d, %d)\n", domain, type, protocol);
   sock = socket(domain, type, protocol);
-
-  printf("%d : ddsrt_socket\n", sock);
 
   if (sock != -1) {
     *sockptr = sock;
@@ -77,7 +76,7 @@ dds_return_t
 ddsrt_close(
   ddsrt_socket_t sock)
 {
-  printf("%d : ddsrt_close\n", sock);
+  printf("DDS | close(%d)\n", sock);
   if (close(sock) != -1)
     return DDS_RETCODE_OK;
 
@@ -99,7 +98,7 @@ ddsrt_bind(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
-  printf("%d : ddsrt_bind\n", sock);
+  printf("DDS | bind(%d,_,%d)\n", sock, /* addr,*/ addrlen);
   if (bind(sock, addr, addrlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -124,7 +123,7 @@ ddsrt_listen(
   ddsrt_socket_t sock,
   int backlog)
 {
-  printf("%d : ddsrt_listen\n", sock);
+  printf("DDS | listen(%d,%d)\n", sock, backlog);
   if (listen(sock, backlog) == 0)
     return DDS_RETCODE_OK;
 
@@ -149,7 +148,7 @@ ddsrt_connect(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
-  printf("%d : ddsrt_connect\n", sock);
+  printf("DDS | connect(%d,_,%d)\n", sock, /*addr,*/ addrlen);
   if (connect(sock, addr, addrlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -193,9 +192,9 @@ ddsrt_accept(
   socklen_t *addrlen,
   ddsrt_socket_t *connptr)
 {
-  printf("%d : ddsrt_accept\n", sock);
   ddsrt_socket_t conn;
 
+  printf("DDS | accept(%d,_,_)\n", sock/*, addr, addrlen*/);
   if ((conn = accept(sock, addr, addrlen)) != -1) {
     *connptr = conn;
     return DDS_RETCODE_OK;
@@ -240,7 +239,7 @@ ddsrt_getsockname(
   struct sockaddr *addr,
   socklen_t *addrlen)
 {
-    printf("%d : ddsrt_getsockname\n", sock);
+    printf("DDS | getsockname(%d,_,_)\n", sock/*, addr, addrlen*/);
     if (getsockname(sock, addr, addrlen) == 0)
       return DDS_RETCODE_OK;
 
@@ -267,7 +266,6 @@ ddsrt_getsockopt(
   void *optval,
   socklen_t *optlen)
 {
-  printf("%d : ddsrt_getsockopt\n", sock);
 #if LWIP_SOCKET
   if (optname == SO_SNDBUF || optname == SO_RCVBUF)
     return DDS_RETCODE_BAD_PARAMETER;
@@ -277,6 +275,7 @@ ddsrt_getsockopt(
 # endif /* SO_REUSE */
 #endif /* LWIP_SOCKET */
 
+  printf("DDS | getsockopt(%d,%d,%d,_,_)\n", sock, level, optname/*, optval, optlen*/);
   if (getsockopt(sock, level, optname, optval, optlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -302,7 +301,6 @@ ddsrt_setsockopt(
   const void *optval,
   socklen_t optlen)
 {
-  printf("%d : ddsrt_setsockopt\n", sock);
 #if LWIP_SOCKET
   if (optname == SO_SNDBUF || optname == SO_RCVBUF)
     return DDS_RETCODE_BAD_PARAMETER;
@@ -325,11 +323,24 @@ ddsrt_setsockopt(
       return DDS_RETCODE_OK;
   }
 
+  printf("DDS | setsockopt(%d,%d,%d,0x", sock, level, optname);
+  for (socklen_t i = 0; i < optlen; i ++) {
+    printf("%02x", ((unsigned char*) optval)[i]);
+  }
+  printf(",%d)\n", optlen);
   if (setsockopt(sock, level, optname, optval, optlen) == -1) {
     goto err_setsockopt;
   }
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
+  if (level == SOL_SOCKET && optname == SO_REUSEADDR)
+  {
+    printf("DDS | setsockopt(%d,%d,%d,0x", sock, level, SO_REUSEPORT);
+    for (socklen_t i = 0; i < optlen; i ++) {
+      printf("%02x", ((unsigned char*) optval)[i]);
+    }
+    printf(",%d)\n", optlen);
+  }
   if (level == SOL_SOCKET && optname == SO_REUSEADDR &&
       setsockopt(sock, level, SO_REUSEPORT, optval, optlen) == -1)
   {
@@ -357,9 +368,9 @@ ddsrt_setsocknonblocking(
   ddsrt_socket_t sock,
   bool nonblock)
 {
-  printf("%d : ddsrt_setsocknonblocking\n", sock);
   int flags;
 
+  printf("DDS | fcntl(%d,%d,%d)\n", sock, F_GETFL, 0);
   flags = fcntl(sock, F_GETFL, 0);
   if (flags == -1) {
     goto err_fcntl;
@@ -369,6 +380,7 @@ ddsrt_setsocknonblocking(
     } else {
       flags &= ~O_NONBLOCK;
     }
+    printf("DDS | fcntl(%d,%d,%d)\n", sock, F_SETFL, flags);
     if (fcntl(sock, F_SETFL, flags) == -1) {
       goto err_fcntl;
     }
@@ -428,10 +440,10 @@ ddsrt_recv(
   int flags,
   ssize_t *rcvd)
 {
-  printf("%d : ddsrt_recv\n", sock);
 
   ssize_t n;
 
+  printf("DDS | recv(%d,_,%zu,%d)\n", sock, /*buf,*/ len, flags);
   if ((n = recv(sock, buf, len, flags)) != -1) {
     assert(n >= 0);
     *rcvd = n;
@@ -444,12 +456,12 @@ ddsrt_recv(
 #if LWIP_SOCKET && !defined(recvmsg)
 static ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
 {
-  printf("%d : ddsrt_recvmsg\n", sock);
   assert(msg->msg_iovlen == 1);
   assert(msg->msg_controllen == 0);
 
   msg->msg_flags = 0;
 
+  printf("DDS | recvfrom(?)\n"); /* %d,%d,%d,%d,%d,%d)\n", sockfd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len, flags, msg->msg_name,&msg->msg_namelen); */
   return recvfrom(
     sockfd,
     msg->msg_iov[0].iov_base,
@@ -467,9 +479,9 @@ ddsrt_recvmsg(
   int flags,
   ssize_t *rcvd)
 {
-    printf("%d : ddsrt_recvmsg\n", sock);
     ssize_t n;
 
+    printf("DDS | recvmsg(%d,_,%d)\n", sock, /*msg,*/ flags);
     if ((n = recvmsg(sock, msg, flags)) != -1) {
       assert(n >= 0);
       *rcvd = n;
@@ -530,10 +542,9 @@ ddsrt_send(
   int flags,
   ssize_t *sent)
 {
-  printf("%d : ddsrt_send\n", sock);
-
   ssize_t n;
 
+  printf("DDS | send(%d,_,%zu,%d)\n", sock, /*buf,*/ len, flags);
   if ((n = send(sock, buf, len, flags)) != -1) {
     assert(n >= 0);
     *sent = n;
@@ -550,15 +561,9 @@ ddsrt_sendmsg(
   int flags,
   ssize_t *sent)
 {
-  struct sockaddr_in sin; 
-  socklen_t len = sizeof(sin); 
-  if (getsockname(sock, (struct sockaddr *)&sin, &len) == -1){
-      perror("getsockname"); 
-  }
-
-  printf("%d - %d : ddsrt_sendmsg\n", sock, ntohs(sin.sin_port));
   ssize_t n;
 
+  printf("DDS | sendmsg(%d,_,%d)\n", sock, /*msg,*/ flags );
   if ((n = sendmsg(sock, msg, flags)) != -1) {
     assert(n >= 0);
     *sent = n;
@@ -577,12 +582,12 @@ ddsrt_select(
   dds_duration_t reltime,
   int32_t *ready)
 {
-  printf("ddsrt_select\n");
 
   int n;
   struct timeval tv, *tvp = NULL;
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
+  printf("DDS | select(%d,_,_,_,_)\n", nfds/*, readfds, writefds, errorfds, tvp*/);
   if ((n = select(nfds, readfds, writefds, errorfds, tvp)) != -1) {
     *ready = n;
     return (n == 0 ? DDS_RETCODE_TIMEOUT : DDS_RETCODE_OK);

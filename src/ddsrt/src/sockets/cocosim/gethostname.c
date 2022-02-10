@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "dds/ddsrt/sockets.h"
 #include "dds/ddsrt/string.h"
@@ -58,6 +59,7 @@ ddsrt_gethostname(
 
   memset(buf, 0, sizeof(buf));
 
+  printf("DDS | gethostname(_, %d)\n", /*buf,*/ HOST_NAME_MAX);
   if (gethostname(buf, HOST_NAME_MAX) == 0) {
     /* If truncation occurrs, no error is returned whether or not the buffer
        is null-terminated. */
