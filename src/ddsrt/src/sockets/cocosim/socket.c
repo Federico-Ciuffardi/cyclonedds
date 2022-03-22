@@ -39,6 +39,10 @@
 #endif /* __APPLE__ || __FreeBSD__ */
 #endif /* LWIP_SOCKET */
 
+#define COCOSIM_NS_PID_FILE_PATH "/tmp/cocosim_ns_pid"
+bool connectedToNS3 = false;
+char* namespace = NULL;
+
 void cocosim_log(int level, const char* format, ...){
   if (level & DEBUG_LEVEL) {
     fprintf(DEBUG_STREAM,"%s","DDS | ");
@@ -62,6 +66,51 @@ void cocosim_log(int level, const char* format, ...){
 dds_return_t
 ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 {
+  if (!connectedToNS3) {
+    FILE* fp = fopen(COCOSIM_NS_PID_FILE_PATH,"r");
+    if (!fp) {
+      cocosim_log(LOG_FATAL, "Failed opening %s", COCOSIM_NS_PID_FILE_PATH);
+      perror("");
+      exit(EXIT_FAILURE);
+    }
+
+    pid_t target_pid = getpid();
+
+    const char delim[3] = " :";
+    char* line = NULL;
+    size_t len = 0;
+    sleep(5); // wait for initialization (TODO sync properly)
+    while (getline(&line, &len, fp) != -1) {
+      // parse pid
+      char *token = strtok(line, delim);
+      if (!token) { 
+        cocosim_log(LOG_FATAL, "Failed parsing pid from %s\n", line);
+        exit(EXIT_FAILURE);
+      }
+      int pid = atoi(token);
+
+      if (pid == target_pid){
+        // parse namespace or name if there is no namespace 
+        token = strtok(NULL, delim);
+        if (!token) { 
+          cocosim_log(LOG_FATAL, "Failed parsing namespace %s\n", line);
+          exit(EXIT_FAILURE);
+        }
+        namespace = strdup(token);
+        break;
+      }
+    }
+
+    fclose(fp);
+    free(line); 
+
+    cocosim_log(LOG_INFO, "namespace: %s\n",namespace);
+
+    cocosim_log(LOG_INFO, "ns3_start_service()\n");
+    /* ns3_start_service(); */
+
+    connectedToNS3 = true;
+  }
 
   ddsrt_socket_t sock;
 
