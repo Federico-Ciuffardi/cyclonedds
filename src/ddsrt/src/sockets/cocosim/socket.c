@@ -17,6 +17,7 @@
 #include "dds/ddsrt/misc.h"
 #include "dds/ddsrt/sockets_priv.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 #if !LWIP_SOCKET
 #if defined(__VXWORKS__)
@@ -38,6 +39,26 @@
 #endif /* __APPLE__ || __FreeBSD__ */
 #endif /* LWIP_SOCKET */
 
+void cocosim_log(int level, const char* format, ...){
+  if (level & DEBUG_LEVEL) {
+    fprintf(DEBUG_STREAM,"%s","DDS | ");
+    switch (level) {
+      case LOG_FATAL : fprintf(DEBUG_STREAM,"%s","FATAL"); break;
+      case LOG_ERROR : fprintf(DEBUG_STREAM,"%s","ERROR"); break;
+      case LOG_WARN  : fprintf(DEBUG_STREAM,"%s","WARN"); break;
+      case LOG_INFO  : fprintf(DEBUG_STREAM,"%s","INFO"); break;
+      case LOG_DEBUG : fprintf(DEBUG_STREAM,"%s","DEBUG"); break;
+    }
+    fprintf(DEBUG_STREAM,"%s"," : ");
+    /* fprintf(DEBUG_STREAM,"%s:%d:", __FILE__, __LINE__); */
+    va_list(args);
+    va_start(args, format);
+    vfprintf(DEBUG_STREAM, format, args);
+    fflush(DEBUG_STREAM);
+    va_end(args);
+  }
+}
+
 dds_return_t
 ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 {
@@ -46,7 +67,7 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 
   assert(sockptr != NULL);
 
-  printf("DDS | socket(%d, %d, %d)\n", domain, type, protocol);
+  cocosim_log(LOG_DEBUG, "socket(%d, %d, %d)\n", domain, type, protocol);
   sock = socket(domain, type, protocol);
 
   if (sock != -1) {
@@ -76,7 +97,7 @@ dds_return_t
 ddsrt_close(
   ddsrt_socket_t sock)
 {
-  printf("DDS | close(%d)\n", sock);
+  cocosim_log(LOG_DEBUG, "close(%d)\n", sock);
   if (close(sock) != -1)
     return DDS_RETCODE_OK;
 
@@ -98,7 +119,7 @@ ddsrt_bind(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
-  printf("DDS | bind(%d,_,%d)\n", sock, /* addr,*/ addrlen);
+  cocosim_log(LOG_DEBUG, "bind(%d,_,%d)\n", sock, /* addr,*/ addrlen);
   if (bind(sock, addr, addrlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -123,7 +144,7 @@ ddsrt_listen(
   ddsrt_socket_t sock,
   int backlog)
 {
-  printf("DDS | listen(%d,%d)\n", sock, backlog);
+  cocosim_log(LOG_DEBUG, "listen(%d,%d)\n", sock, backlog);
   if (listen(sock, backlog) == 0)
     return DDS_RETCODE_OK;
 
@@ -148,7 +169,7 @@ ddsrt_connect(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
-  printf("DDS | connect(%d,_,%d)\n", sock, /*addr,*/ addrlen);
+  cocosim_log(LOG_DEBUG, "connect(%d,_,%d)\n", sock, /*addr,*/ addrlen);
   if (connect(sock, addr, addrlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -194,7 +215,7 @@ ddsrt_accept(
 {
   ddsrt_socket_t conn;
 
-  printf("DDS | accept(%d,_,_)\n", sock/*, addr, addrlen*/);
+  cocosim_log(LOG_DEBUG, "accept(%d,_,_)\n", sock/*, addr, addrlen*/);
   if ((conn = accept(sock, addr, addrlen)) != -1) {
     *connptr = conn;
     return DDS_RETCODE_OK;
@@ -239,7 +260,7 @@ ddsrt_getsockname(
   struct sockaddr *addr,
   socklen_t *addrlen)
 {
-    printf("DDS | getsockname(%d,_,_)\n", sock/*, addr, addrlen*/);
+    cocosim_log(LOG_DEBUG, "getsockname(%d,_,_)\n", sock/*, addr, addrlen*/);
     if (getsockname(sock, addr, addrlen) == 0)
       return DDS_RETCODE_OK;
 
@@ -275,7 +296,7 @@ ddsrt_getsockopt(
 # endif /* SO_REUSE */
 #endif /* LWIP_SOCKET */
 
-  printf("DDS | getsockopt(%d,%d,%d,_,_)\n", sock, level, optname/*, optval, optlen*/);
+  cocosim_log(LOG_DEBUG, "getsockopt(%d,%d,%d,_,_)\n", sock, level, optname/*, optval, optlen*/);
   if (getsockopt(sock, level, optname, optval, optlen) == 0)
     return DDS_RETCODE_OK;
 
@@ -323,7 +344,7 @@ ddsrt_setsockopt(
       return DDS_RETCODE_OK;
   }
 
-  printf("DDS | setsockopt(%d,%d,%d,0x", sock, level, optname);
+  cocosim_log(LOG_DEBUG, "setsockopt(%d,%d,%d,0x", sock, level, optname);
   for (socklen_t i = 0; i < optlen; i ++) {
     printf("%02x", ((unsigned char*) optval)[i]);
   }
@@ -335,7 +356,7 @@ ddsrt_setsockopt(
 #if defined(__APPLE__) || defined(__FreeBSD__)
   if (level == SOL_SOCKET && optname == SO_REUSEADDR)
   {
-    printf("DDS | setsockopt(%d,%d,%d,0x", sock, level, SO_REUSEPORT);
+    cocosim_log(LOG_DEBUG, "setsockopt(%d,%d,%d,0x", sock, level, SO_REUSEPORT);
     for (socklen_t i = 0; i < optlen; i ++) {
       printf("%02x", ((unsigned char*) optval)[i]);
     }
@@ -370,7 +391,7 @@ ddsrt_setsocknonblocking(
 {
   int flags;
 
-  printf("DDS | fcntl(%d,%d,%d)\n", sock, F_GETFL, 0);
+  cocosim_log(LOG_DEBUG, "fcntl(%d,%d,%d)\n", sock, F_GETFL, 0);
   flags = fcntl(sock, F_GETFL, 0);
   if (flags == -1) {
     goto err_fcntl;
@@ -380,7 +401,7 @@ ddsrt_setsocknonblocking(
     } else {
       flags &= ~O_NONBLOCK;
     }
-    printf("DDS | fcntl(%d,%d,%d)\n", sock, F_SETFL, flags);
+    cocosim_log(LOG_DEBUG, "fcntl(%d,%d,%d)\n", sock, F_SETFL, flags);
     if (fcntl(sock, F_SETFL, flags) == -1) {
       goto err_fcntl;
     }
@@ -443,7 +464,7 @@ ddsrt_recv(
 
   ssize_t n;
 
-  printf("DDS | recv(%d,_,%zu,%d)\n", sock, /*buf,*/ len, flags);
+  cocosim_log(LOG_DEBUG, "recv(%d,_,%zu,%d)\n", sock, /*buf,*/ len, flags);
   if ((n = recv(sock, buf, len, flags)) != -1) {
     assert(n >= 0);
     *rcvd = n;
@@ -461,7 +482,7 @@ static ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
 
   msg->msg_flags = 0;
 
-  printf("DDS | recvfrom(?)\n"); /* %d,%d,%d,%d,%d,%d)\n", sockfd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len, flags, msg->msg_name,&msg->msg_namelen); */
+  cocosim_log(LOG_DEBUG, "recvfrom(?)\n"); /* %d,%d,%d,%d,%d,%d)\n", sockfd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len, flags, msg->msg_name,&msg->msg_namelen); */
   return recvfrom(
     sockfd,
     msg->msg_iov[0].iov_base,
@@ -481,7 +502,7 @@ ddsrt_recvmsg(
 {
     ssize_t n;
 
-    printf("DDS | recvmsg(%d,_,%d)\n", sock, /*msg,*/ flags);
+    cocosim_log(LOG_DEBUG, "recvmsg(%d,_,%d)\n", sock, /*msg,*/ flags);
     if ((n = recvmsg(sock, msg, flags)) != -1) {
       assert(n >= 0);
       *rcvd = n;
@@ -544,7 +565,7 @@ ddsrt_send(
 {
   ssize_t n;
 
-  printf("DDS | send(%d,_,%zu,%d)\n", sock, /*buf,*/ len, flags);
+  cocosim_log(LOG_DEBUG, "send(%d,_,%zu,%d)\n", sock, /*buf,*/ len, flags);
   if ((n = send(sock, buf, len, flags)) != -1) {
     assert(n >= 0);
     *sent = n;
@@ -563,7 +584,7 @@ ddsrt_sendmsg(
 {
   ssize_t n;
 
-  printf("DDS | sendmsg(%d,_,%d)\n", sock, /*msg,*/ flags );
+  cocosim_log(LOG_DEBUG, "sendmsg(%d,_,%d)\n", sock, /*msg,*/ flags );
   if ((n = sendmsg(sock, msg, flags)) != -1) {
     assert(n >= 0);
     *sent = n;
@@ -587,7 +608,7 @@ ddsrt_select(
   struct timeval tv, *tvp = NULL;
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
-  printf("DDS | select(%d,_,_,_,_)\n", nfds/*, readfds, writefds, errorfds, tvp*/);
+  cocosim_log(LOG_DEBUG, "select(%d,_,_,_,_)\n", nfds/*, readfds, writefds, errorfds, tvp*/);
   if ((n = select(nfds, readfds, writefds, errorfds, tvp)) != -1) {
     *ready = n;
     return (n == 0 ? DDS_RETCODE_TIMEOUT : DDS_RETCODE_OK);

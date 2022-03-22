@@ -33,6 +33,20 @@ extern const struct in6_addr ddsrt_in6addr_loopback;
 
 #define DDSRT_AF_TERM (-1)
 
+#define LOG_FATAL 1
+#define LOG_ERROR 2
+#define LOG_WARN  4
+#define LOG_INFO  8
+#define LOG_DEBUG 16
+
+#define DEBUG_STREAM stderr
+#define DEBUG_LEVEL LOG_FATAL | LOG_ERROR | LOG_WARN | LOG_INFO | LOG_DEBUG
+
+DDS_EXPORT void 
+cocosim_log(int level, 
+    const char* format, 
+    ...);
+
 DDS_EXPORT dds_return_t
 ddsrt_gethostname(
   char *hostname,
