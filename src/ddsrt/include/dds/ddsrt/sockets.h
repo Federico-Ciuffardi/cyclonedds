@@ -43,6 +43,11 @@ extern const struct in6_addr ddsrt_in6addr_loopback;
 #define DEBUG_LEVEL LOG_FATAL | LOG_ERROR | LOG_WARN | LOG_INFO | LOG_DEBUG
 
 DDS_EXPORT void 
+cocosim_log_printf(int level, 
+    const char* format, 
+    ...);
+
+DDS_EXPORT void 
 cocosim_log(int level, 
     const char* format, 
     ...);

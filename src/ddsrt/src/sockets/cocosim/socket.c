@@ -43,8 +43,17 @@
 bool connectedToNS3 = false;
 char* namespace = NULL;
 
+void cocosim_log_printf(int level, const char* format, ...){
+  if ((level) & (DEBUG_LEVEL)) {
+    va_list(args);
+    va_start(args, format);
+    vfprintf(DEBUG_STREAM, format, args);
+    va_end(args);
+  }
+}
+
 void cocosim_log(int level, const char* format, ...){
-  if (level & DEBUG_LEVEL) {
+  if ((level) & (DEBUG_LEVEL)) {
     fprintf(DEBUG_STREAM,"%s","DDS | ");
     switch (level) {
       case LOG_FATAL : fprintf(DEBUG_STREAM,"%s","FATAL"); break;
@@ -58,8 +67,8 @@ void cocosim_log(int level, const char* format, ...){
     va_list(args);
     va_start(args, format);
     vfprintf(DEBUG_STREAM, format, args);
-    fflush(DEBUG_STREAM);
     va_end(args);
+    fflush(DEBUG_STREAM);
   }
 }
 
@@ -395,9 +404,9 @@ ddsrt_setsockopt(
 
   cocosim_log(LOG_DEBUG, "setsockopt(%d,%d,%d,0x", sock, level, optname);
   for (socklen_t i = 0; i < optlen; i ++) {
-    printf("%02x", ((unsigned char*) optval)[i]);
+    cocosim_log_printf(LOG_DEBUG, "%02x", ((unsigned char*) optval)[i]);
   }
-  printf(",%d)\n", optlen);
+  cocosim_log_printf(LOG_DEBUG, ",%d)\n", optlen);
   if (setsockopt(sock, level, optname, optval, optlen) == -1) {
     goto err_setsockopt;
   }
@@ -407,9 +416,9 @@ ddsrt_setsockopt(
   {
     cocosim_log(LOG_DEBUG, "setsockopt(%d,%d,%d,0x", sock, level, SO_REUSEPORT);
     for (socklen_t i = 0; i < optlen; i ++) {
-      printf("%02x", ((unsigned char*) optval)[i]);
+      cocosim_log_printf(LOG_DEBUG, ",%02x", ((unsigned char*) optval)[i]);
     }
-    printf(",%d)\n", optlen);
+    cocosim_log_printf(LOG_DEBUG, ",%d)\n", optlen);
   }
   if (level == SOL_SOCKET && optname == SO_REUSEADDR &&
       setsockopt(sock, level, SO_REUSEPORT, optval, optlen) == -1)
