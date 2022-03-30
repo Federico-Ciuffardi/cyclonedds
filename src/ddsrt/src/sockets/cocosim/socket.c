@@ -15,7 +15,9 @@
 
 #include "dds/ddsrt/log.h"
 #include "dds/ddsrt/misc.h"
+#include "dds/ddsrt/sockets.h"
 #include "dds/ddsrt/sockets_priv.h"
+#include "ns3.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -39,9 +41,44 @@
 #endif /* __APPLE__ || __FreeBSD__ */
 #endif /* LWIP_SOCKET */
 
+// list
+typedef struct socket_list_node {
+  ddsrt_socket_t v;
+  struct socket_list_node *next;
+} socket_list_node;
+
+typedef struct socket_list_node* socket_list;
+
+inline void insert(socket_list *sl,ddsrt_socket_t v){
+  socket_list new = (socket_list) malloc(sizeof(socket_list_node));
+  new->next = *sl;
+  new->v = v;
+  *sl = new;
+}
+
+inline bool find(socket_list sl, ddsrt_socket_t v){
+  socket_list it;
+  for(it = sl; it != NULL && it->v != v; it=it->next);
+  return it != NULL;
+}
+
+inline void print(socket_list sl){
+  socket_list it;
+  cocosim_log(LOG_INFO,"Sock list:");
+  for(it = sl; it != NULL; it=it->next){
+    cocosim_log_printf(LOG_INFO,"->%d", it->v);
+  }
+  cocosim_log_printf(LOG_INFO,"\n");
+
+}
 #define COCOSIM_NS_PID_FILE_PATH "/tmp/cocosim_ns_pid"
 bool connectedToNS3 = false;
 char* namespace = NULL;
+
+// main
+
+socket_list ns3_sockets = NULL;
+
 
 void cocosim_log_printf(int level, const char* format, ...){
   if ((level) & (DEBUG_LEVEL)) {
@@ -116,7 +153,8 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
     cocosim_log(LOG_INFO, "namespace: %s\n",namespace);
 
     cocosim_log(LOG_INFO, "ns3_start_service()\n");
-    /* ns3_start_service(); */
+
+    ns3_start_service();
 
     connectedToNS3 = true;
   }
@@ -125,9 +163,17 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 
   assert(sockptr != NULL);
 
-  cocosim_log(LOG_DEBUG, "socket(%d, %d, %d)\n", domain, type, protocol);
-  sock = socket(domain, type, protocol);
+  if(namespace && type == SOCK_DGRAM){
+    sock = ns3_socket(domain, type, protocol);
+    insert(&ns3_sockets, sock);
+    cocosim_log(LOG_DEBUG, "[ns-3] ");
+  }else{
+    sock = socket(domain, type, protocol);
+    cocosim_log(LOG_DEBUG, "[posix] ");
+  }
+  cocosim_log_printf(LOG_DEBUG, "%d = socket(%d, %d, %d)\n", sock, domain, type, protocol);
 
+  
   if (sock != -1) {
     *sockptr = sock;
     return DDS_RETCODE_OK;
@@ -177,8 +223,17 @@ ddsrt_bind(
   const struct sockaddr *addr,
   socklen_t addrlen)
 {
-  cocosim_log(LOG_DEBUG, "bind(%d,_,%d)\n", sock, /* addr,*/ addrlen);
-  if (bind(sock, addr, addrlen) == 0)
+  int rc;
+  if(namespace && find(ns3_sockets, sock)){
+    rc = ns3_bind(sock, addr, addrlen);
+    cocosim_log(LOG_DEBUG, "[ns-3] ");
+  }else{
+    rc = bind(sock, addr, addrlen);
+    cocosim_log(LOG_DEBUG, "[posix] ");
+  }
+  cocosim_log_printf(LOG_DEBUG, "%d = bind(%d,_,%d)\n", rc, sock, /* addr,*/ addrlen);
+
+  if (rc == 0)
     return DDS_RETCODE_OK;
 
   switch (errno) {
@@ -318,8 +373,17 @@ ddsrt_getsockname(
   struct sockaddr *addr,
   socklen_t *addrlen)
 {
-    cocosim_log(LOG_DEBUG, "getsockname(%d,_,_)\n", sock/*, addr, addrlen*/);
-    if (getsockname(sock, addr, addrlen) == 0)
+    int rc;
+    if(namespace && find(ns3_sockets, sock)){
+      rc = 0; // do nothing
+      cocosim_log(LOG_DEBUG, "[ns-3] ");
+    }else{
+      rc = getsockname(sock, addr, addrlen);
+      cocosim_log(LOG_DEBUG, "[posix] ");
+    }
+
+    cocosim_log_printf(LOG_DEBUG, "%d = getsockname(%d,_,_)\n", rc, sock/*, addr, addrlen*/);
+    if (rc == 0)
       return DDS_RETCODE_OK;
 
     switch (errno) {
@@ -402,27 +466,44 @@ ddsrt_setsockopt(
       return DDS_RETCODE_OK;
   }
 
-  cocosim_log(LOG_DEBUG, "setsockopt(%d,%d,%d,0x", sock, level, optname);
+
+  int rc;
+  if(namespace && find(ns3_sockets, sock)){
+    rc = 0; // do nothing
+    cocosim_log(LOG_DEBUG, "[ns-3] ");
+  }else{
+    rc = setsockopt(sock, level, optname, optval, optlen);
+    cocosim_log(LOG_DEBUG, "[posix] ");
+  }
+
+  cocosim_log_printf(LOG_DEBUG, "%d = setsockopt(%d,%d,%d,0x",rc, sock, level, optname);
   for (socklen_t i = 0; i < optlen; i ++) {
     cocosim_log_printf(LOG_DEBUG, "%02x", ((unsigned char*) optval)[i]);
   }
   cocosim_log_printf(LOG_DEBUG, ",%d)\n", optlen);
-  if (setsockopt(sock, level, optname, optval, optlen) == -1) {
+
+  if (rc == -1) {
     goto err_setsockopt;
   }
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
-  if (level == SOL_SOCKET && optname == SO_REUSEADDR)
-  {
-    cocosim_log(LOG_DEBUG, "setsockopt(%d,%d,%d,0x", sock, level, SO_REUSEPORT);
+  if (level == SOL_SOCKET && optname == SO_REUSEADDR) {
+    if(namespace && find(ns3_sockets, sock)){
+      rc = 0; // do nothing
+      cocosim_log(LOG_DEBUG, "[ns-3] ");
+    }else{
+      rc = setsockopt(sock, level, SO_REUSEPORT, optval, optlen);
+      cocosim_log(LOG_DEBUG, "[posix] ");
+    }
+
+    cocosim_log_printf(LOG_DEBUG, "%d = setsockopt(%d,%d,%d,0x", rc, sock, level, SO_REUSEPORT);
     for (socklen_t i = 0; i < optlen; i ++) {
       cocosim_log_printf(LOG_DEBUG, ",%02x", ((unsigned char*) optval)[i]);
     }
     cocosim_log_printf(LOG_DEBUG, ",%d)\n", optlen);
   }
-  if (level == SOL_SOCKET && optname == SO_REUSEADDR &&
-      setsockopt(sock, level, SO_REUSEPORT, optval, optlen) == -1)
-  {
+
+  if (rc == -1) {
     goto err_setsockopt;
   }
 #endif /* __APPLE__ || __FreeBSD__ */
@@ -559,9 +640,16 @@ ddsrt_recvmsg(
   ssize_t *rcvd)
 {
     ssize_t n;
+    if(namespace && find(ns3_sockets, sock)){
+      n = 1;
+      cocosim_log(LOG_DEBUG, "[ns-3] ");
+    }else{
+      n = recvmsg(sock, msg, flags);
+      cocosim_log(LOG_DEBUG, "[posix] ");
+    }
 
-    cocosim_log(LOG_DEBUG, "recvmsg(%d,_,%d)\n", sock, /*msg,*/ flags);
-    if ((n = recvmsg(sock, msg, flags)) != -1) {
+    cocosim_log_printf(LOG_DEBUG, "%d = recvmsg(%d,_,%d)\n", n,  sock, /*msg,*/ flags);
+    if (n != -1) {
       assert(n >= 0);
       *rcvd = n;
       return DDS_RETCODE_OK;
@@ -641,9 +729,17 @@ ddsrt_sendmsg(
   ssize_t *sent)
 {
   ssize_t n;
+  if(namespace && find(ns3_sockets, sock)){
+    n = 1;
+    cocosim_log(LOG_DEBUG, "[ns-3] ");
+  }else{
+    n = sendmsg(sock, msg, flags);
+    cocosim_log(LOG_DEBUG, "[posix] ");
+  }
 
-  cocosim_log(LOG_DEBUG, "sendmsg(%d,_,%d)\n", sock, /*msg,*/ flags );
-  if ((n = sendmsg(sock, msg, flags)) != -1) {
+  cocosim_log_printf(LOG_DEBUG, "%d = sendmsg(%d,_,%d)\n", n, sock, /*msg,*/ flags );
+
+  if (n != -1) {
     assert(n >= 0);
     *sent = n;
     return DDS_RETCODE_OK;
@@ -666,8 +762,17 @@ ddsrt_select(
   struct timeval tv, *tvp = NULL;
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
-  cocosim_log(LOG_DEBUG, "select(%d,_,_,_,_)\n", nfds/*, readfds, writefds, errorfds, tvp*/);
-  if ((n = select(nfds, readfds, writefds, errorfds, tvp)) != -1) {
+
+  if(namespace){ // no namespace -> all sockets are managed by ns-3
+    n = 1;
+    cocosim_log(LOG_DEBUG, "[ns-3] ");
+  }else{
+    n = select(nfds, readfds, writefds, errorfds, tvp);
+    cocosim_log(LOG_DEBUG, "[posix] ");
+  }
+  cocosim_log_printf(LOG_DEBUG, "%d = select(%d,_,_,_,_)\n", n, nfds/*, readfds, writefds, errorfds, tvp*/);
+
+  if (n != -1) {
     *ready = n;
     return (n == 0 ? DDS_RETCODE_TIMEOUT : DDS_RETCODE_OK);
   }
