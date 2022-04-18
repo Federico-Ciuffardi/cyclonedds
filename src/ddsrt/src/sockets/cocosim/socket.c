@@ -122,27 +122,43 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 
     pid_t target_pid = getpid();
 
-    const char delim[3] = " :";
+    const char delim[2] = ":";
     char* line = NULL;
     size_t len = 0;
     sleep(5); // wait for initialization (TODO sync properly)
     while (getline(&line, &len, fp) != -1) {
+      // remove white spaces
+      size_t i = 0;
+      size_t k = 0;
+      while(i+k < len){
+        if(line[i+k] == ' '){
+          k++;
+        }else{
+          line[i] = line[i+k];
+          i++;
+        }
+      }
+      line[i] = '\0';
+
       // parse pid
-      char *token = strtok(line, delim);
+      char* it = line;
+      char* token = strsep(&it, delim);
       if (!token) { 
-        cocosim_log(LOG_FATAL, "Failed parsing pid from %s\n", line);
+        cocosim_log(LOG_FATAL, "Failed parsing pid from %s\n", it);
         exit(EXIT_FAILURE);
       }
       int pid = atoi(token);
 
       if (pid == target_pid){
         // parse namespace or name if there is no namespace 
-        token = strtok(NULL, delim);
+        token = strsep(&it, delim);
         if (!token) { 
-          cocosim_log(LOG_FATAL, "Failed parsing namespace %s\n", line);
+          cocosim_log(LOG_FATAL, "Failed parsing namespace %s\n", it);
           exit(EXIT_FAILURE);
         }
-        namespace = strdup(token);
+        if (*token != '\0'){
+          namespace = strdup(token);
+        }
         break;
       }
     }
