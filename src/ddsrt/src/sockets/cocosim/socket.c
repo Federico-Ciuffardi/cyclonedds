@@ -17,11 +17,10 @@
 #include "dds/ddsrt/misc.h"
 #include "dds/ddsrt/sockets.h"
 #include "dds/ddsrt/sockets_priv.h"
-#include "ns3.h"
+#include "ns3calls.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-#if !LWIP_SOCKET
 #if defined(__VXWORKS__)
 #include <vxWorks.h>
 #include <sockLib.h>
@@ -39,7 +38,6 @@
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/sockio.h>
 #endif /* __APPLE__ || __FreeBSD__ */
-#endif /* LWIP_SOCKET */
 
 // list
 typedef struct socket_list_node {
@@ -168,19 +166,20 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 
     cocosim_log(LOG_INFO, "namespace: %s\n",namespace);
 
-    cocosim_log(LOG_INFO, "ns3_start_service()\n");
-
-    ns3_start_service();
-
-    connectedToNS3 = true;
+    if(namespace) {
+      cocosim_log(LOG_INFO, "ns3_start_service()\n");
+      ns3_start_service();
+      connectedToNS3 = true;
+    }
   }
 
   ddsrt_socket_t sock;
 
   assert(sockptr != NULL);
 
+  cocosim_log(LOG_DEBUG, "socket type = %d\n", type);
   if(namespace && type == SOCK_DGRAM){
-    sock = ns3_socket(domain, type, protocol);
+    sock = ns3_socket(domain, type, protocol, namespace);
     insert(&ns3_sockets, sock);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
@@ -391,14 +390,14 @@ ddsrt_getsockname(
 {
     int rc;
     if(namespace && find(ns3_sockets, sock)){
-      rc = 0; // do nothing
+      rc = ns3_getsockname(sock, addr, addrlen);
       cocosim_log(LOG_DEBUG, "[ns-3] ");
     }else{
       rc = getsockname(sock, addr, addrlen);
       cocosim_log(LOG_DEBUG, "[posix] ");
     }
-
     cocosim_log_printf(LOG_DEBUG, "%d = getsockname(%d,_,_)\n", rc, sock/*, addr, addrlen*/);
+
     if (rc == 0)
       return DDS_RETCODE_OK;
 
@@ -425,18 +424,20 @@ ddsrt_getsockopt(
   void *optval,
   socklen_t *optlen)
 {
-#if LWIP_SOCKET
-  if (optname == SO_SNDBUF || optname == SO_RCVBUF)
-    return DDS_RETCODE_BAD_PARAMETER;
-# if !SO_REUSE
-  if (optname == SO_REUSEADDR)
-    return DDS_RETCODE_BAD_PARAMETER;
-# endif /* SO_REUSE */
-#endif /* LWIP_SOCKET */
+  int rc;
+  if(namespace && find(ns3_sockets, sock)){
+    rc = -2; // fail with DDS_RETCODE_BAD_PARAMETER
+    cocosim_log(LOG_DEBUG, "[ns-3] ");
+  }else{
+    rc = getsockopt(sock, level, optname, optval, optlen);
+    cocosim_log(LOG_DEBUG, "[posix] ");
+  }
+  cocosim_log_printf(LOG_DEBUG, "%d = getsockopt(%d,%d,%d,_,_)\n", rc, sock, level, optname/*, optval, optlen*/);
 
-  cocosim_log(LOG_DEBUG, "getsockopt(%d,%d,%d,_,_)\n", sock, level, optname/*, optval, optlen*/);
-  if (getsockopt(sock, level, optname, optval, optlen) == 0)
+  if (rc == 0)
     return DDS_RETCODE_OK;
+  else if (rc == -2)
+    return DDS_RETCODE_BAD_PARAMETER;
 
   switch (errno) {
     case EBADF:
@@ -460,15 +461,6 @@ ddsrt_setsockopt(
   const void *optval,
   socklen_t optlen)
 {
-#if LWIP_SOCKET
-  if (optname == SO_SNDBUF || optname == SO_RCVBUF)
-    return DDS_RETCODE_BAD_PARAMETER;
-# if !SO_REUSE
-  if (optname == SO_REUSEADDR)
-    return DDS_RETCODE_BAD_PARAMETER;
-# endif /* SO_REUSE */
-#endif /* LWIP_SOCKET */
-
   switch (optname) {
     case SO_SNDBUF:
     case SO_RCVBUF:
@@ -629,25 +621,6 @@ ddsrt_recv(
   return recv_error_to_retcode(errno);
 }
 
-#if LWIP_SOCKET && !defined(recvmsg)
-static ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
-{
-  assert(msg->msg_iovlen == 1);
-  assert(msg->msg_controllen == 0);
-
-  msg->msg_flags = 0;
-
-  cocosim_log(LOG_DEBUG, "recvfrom(?)\n"); /* %d,%d,%d,%d,%d,%d)\n", sockfd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len, flags, msg->msg_name,&msg->msg_namelen); */
-  return recvfrom(
-    sockfd,
-    msg->msg_iov[0].iov_base,
-    msg->msg_iov[0].iov_len,
-    flags,
-    msg->msg_name,
-   &msg->msg_namelen);
-}
-#endif /* LWIP_SOCKET */
-
 dds_return_t
 ddsrt_recvmsg(
   ddsrt_socket_t sock,
@@ -780,7 +753,7 @@ ddsrt_select(
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
 
   if(namespace){ // no namespace -> all sockets are managed by ns-3
-    n = 1;
+    n = ns3_select(nfds, readfds, writefds, errorfds, tvp);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
     n = select(nfds, readfds, writefds, errorfds, tvp);
