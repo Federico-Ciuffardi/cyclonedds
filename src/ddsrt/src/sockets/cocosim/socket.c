@@ -240,13 +240,14 @@ ddsrt_bind(
 {
   int rc;
   if(namespace && find(ns3_sockets, sock)){
+    ((struct sockaddr_in*) addr)->sin_addr.s_addr = htonl (INADDR_ANY);
     rc = ns3_bind(sock, addr, addrlen);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
     rc = bind(sock, addr, addrlen);
     cocosim_log(LOG_DEBUG, "[posix] ");
   }
-  cocosim_log_printf(LOG_DEBUG, "%d = bind(%d,_,%d)\n", rc, sock, /* addr,*/ addrlen);
+  cocosim_log_printf(LOG_DEBUG, "%d = bind(%d,%s,%d)\n", rc, sock, inet_ntoa(((struct sockaddr_in*) addr)->sin_addr), addrlen);
 
   if (rc == 0)
     return DDS_RETCODE_OK;
@@ -630,7 +631,7 @@ ddsrt_recvmsg(
 {
     ssize_t n;
     if(namespace && find(ns3_sockets, sock)){
-      n = 1;
+      n = ns3_recvmsg(sock, msg, flags);
       cocosim_log(LOG_DEBUG, "[ns-3] ");
     }else{
       n = recvmsg(sock, msg, flags);
@@ -719,7 +720,7 @@ ddsrt_sendmsg(
 {
   ssize_t n;
   if(namespace && find(ns3_sockets, sock)){
-    n = 1;
+    n = ns3_sendmsg(sock, msg, flags);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
     n = sendmsg(sock, msg, flags);
@@ -752,14 +753,14 @@ ddsrt_select(
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
 
-  if(namespace){ // no namespace -> all sockets are managed by ns-3
+  if(namespace){ // if namespace existis -> all sockets are managed by ns-3
     n = ns3_select(nfds, readfds, writefds, errorfds, tvp);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
     n = select(nfds, readfds, writefds, errorfds, tvp);
     cocosim_log(LOG_DEBUG, "[posix] ");
   }
-  cocosim_log_printf(LOG_DEBUG, "%d = select(%d,_,_,_,_)\n", n, nfds/*, readfds, writefds, errorfds, tvp*/);
+  cocosim_log_printf(LOG_DEBUG, "%d = select(%d,%d,%d,%d,%d)\n", n, nfds, readfds, writefds, errorfds, tvp);
 
   if (n != -1) {
     *ready = n;

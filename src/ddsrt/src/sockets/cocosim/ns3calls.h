@@ -13,7 +13,7 @@
 
 int ns3_sockfd;
 
-inline void debug_print_buffer(char *name, uint8_t *buffer, int len) {
+void debug_print_buffer(char *name, uint8_t *buffer, int len) {
     printf("%s(%d)=", name, len);
     for (int i = 0; i < len; i++) {
         if (i > 0) printf(":");
@@ -22,7 +22,7 @@ inline void debug_print_buffer(char *name, uint8_t *buffer, int len) {
     printf("\n");
 }
 
-inline void ns3_start_service() {
+void ns3_start_service() {
     struct sockaddr_in servaddr;
     
     ns3_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -41,13 +41,13 @@ inline void ns3_start_service() {
     }
 }
 
-inline int ns3_socket(int domain, int type, int protocol, char* name) {
+int ns3_socket(int domain, int type, int protocol, char *name) {
     struct ns3_socket_req req;
     req.call = SOCKET_REQUEST;
     req.domain = domain;
     req.type = type;
     req.protocol = protocol;
-    req.name_size = strlen(name);
+    req.name_size = strlen (name);
 
     int buffer_size = sizeof (struct ns3_socket_req) + req.name_size;
     unsigned char *buffer = (unsigned char *) malloc (buffer_size);
@@ -61,7 +61,7 @@ inline int ns3_socket(int domain, int type, int protocol, char* name) {
     return res.ret;
 }
 
-inline int ns3_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+int ns3_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     struct ns3_bind_req req;
     req.call = BIND_REQUEST;
     req.sockfd = sockfd;
@@ -79,9 +79,8 @@ inline int ns3_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) 
     return res.ret; 
 }
 
-inline ssize_t ns3_recvfrom(int sockfd, void *buf, size_t len, int flags,
+ssize_t ns3_recvfrom(int sockfd, void *buf, size_t len, int flags,
                  struct sockaddr *src_addr, socklen_t *addrlen) {
-
     struct ns3_recvfrom_req req;
     req.call = RECVFROM_REQUEST;
     req.sockfd = sockfd;
@@ -106,7 +105,12 @@ inline ssize_t ns3_recvfrom(int sockfd, void *buf, size_t len, int flags,
     return res.ret; 
 }
 
-inline ssize_t ns3_sendto(int sockfd, const void *buf, size_t len, int flags,
+ssize_t ns3_recvmsg(int sockfd, struct msghdr *msg, int flags) {
+    return ns3_recvfrom(sockfd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+                flags, (struct sockaddr *)msg->msg_name, &msg->msg_namelen);
+}
+
+ssize_t ns3_sendto(int sockfd, const void *buf, size_t len, int flags,
                const struct sockaddr *dest_addr, socklen_t addrlen) {
 
     struct ns3_sendto_req req;
@@ -129,7 +133,16 @@ inline ssize_t ns3_sendto(int sockfd, const void *buf, size_t len, int flags,
     return res.ret; 
 }
 
-inline int ns3_close(int fd) {
+ssize_t ns3_sendmsg(int sockfd, struct msghdr *msg, int flags) {
+    ssize_t ret = 0;
+    for (int i = 0; i < msg->msg_iovlen; i++) {
+        ret += ns3_sendto(sockfd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len,
+                flags, (struct sockaddr *)msg->msg_name, msg->msg_namelen);
+    }
+    return ret;
+}
+
+int ns3_close(int fd) {
     struct ns3_close_req req;
     req.call = CLOSE_REQUEST;
     req.fd = fd;
@@ -140,7 +153,7 @@ inline int ns3_close(int fd) {
     return res.ret; 
 }
 
-inline int ns3_getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+int ns3_getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     struct ns3_getsockname_req req;
     req.call = GETSOCKNAME_REQUEST;
     req.sockfd = sockfd;
@@ -160,7 +173,7 @@ inline int ns3_getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen
 
 // For now assumes writefds = exceptfds = NULL, and timeout = NULL (infinity)
 // Assume infinity timeout for now
-inline int ns3_select(int nfds, fd_set *readfds, fd_set *writefds, 
+int ns3_select(int nfds, fd_set *readfds, fd_set *writefds, 
                 fd_set *exceptfds, struct timeval *timeout) {
     if (writefds != NULL || exceptfds != NULL) {
         printf("ns3_select is not implemented with writefds != NULL or exceptfds != NULL\n");
@@ -189,9 +202,20 @@ inline int ns3_select(int nfds, fd_set *readfds, fd_set *writefds,
     memcpy(buffer, &req, sizeof(struct ns3_select_req));
     memcpy(buffer + sizeof(struct ns3_select_req), readfds_array, sizeof(int32_t) * req.readfds_size);
     send(ns3_sockfd, buffer, buffer_size, 0);
+
+    struct ns3_select_req res;
+    /* free(buffer); */
+    buffer = (unsigned char *) malloc (1000);
+    recv(ns3_sockfd, buffer, 1000, 0);
+    memcpy(&res, buffer, sizeof (struct ns3_select_req));
+    memcpy(readfds_array, buffer + sizeof (struct ns3_select_req), sizeof(int32_t) * res.readfds_size);
+    FD_ZERO(readfds);
+    for (int i = 0; i < res.readfds_size; i++) {
+        FD_SET(readfds_array[i], readfds);
+    }
     
     free(readfds_array);
-    return 0;
+    return res.readfds_size;
 }
 
 #endif
