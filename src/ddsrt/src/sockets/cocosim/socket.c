@@ -744,6 +744,23 @@ ddsrt_sendmsg(
   return send_error_to_retcode(errno);
 }
 
+void inline print_fdset(int32_t nfds, fd_set *fds) {
+  bool first = true;
+  for (int i = 0; i < nfds; i++) {
+    if (FD_ISSET(i, fds)) {
+      if (first){
+        first = false;
+      }else{
+        cocosim_log_printf(LOG_DEBUG, "|");
+      }
+      cocosim_log_printf(LOG_DEBUG, "%d", i);
+    }
+  }
+  if(first){
+    cocosim_log_printf(LOG_DEBUG, "NULL");
+  }
+}
+
 dds_return_t
 ddsrt_select(
   int32_t nfds,
@@ -759,6 +776,16 @@ ddsrt_select(
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
 
+  fd_set readfdscpy;
+  if(readfds) readfdscpy = *readfds;
+  else FD_ZERO(&readfdscpy);
+  fd_set writefdscpy;
+  if(writefds) writefdscpy = *writefds;
+  else FD_ZERO(&writefdscpy);
+  fd_set errorfdscpy;
+  if(errorfds) errorfdscpy = *errorfds;
+  else FD_ZERO(&errorfdscpy);
+
   if(useNS3){ // if using NS3 -> all sockets are managed by ns-3 (TODO improve)
     n = ns3_select(nfds, readfds, writefds, errorfds, tvp);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
@@ -766,7 +793,14 @@ ddsrt_select(
     n = select(nfds, readfds, writefds, errorfds, tvp);
     cocosim_log(LOG_DEBUG, "[posix] ");
   }
-  cocosim_log_printf(LOG_DEBUG, "%d = select(%d,%d,%d,%d,%d)\n", n, nfds, readfds, writefds, errorfds, tvp);
+  cocosim_log_printf(LOG_DEBUG, "%d = select(%d,", n, nfds);
+  print_fdset(nfds, &readfdscpy);
+  cocosim_log_printf(LOG_DEBUG, ",");
+  print_fdset(nfds, &writefdscpy);
+  cocosim_log_printf(LOG_DEBUG, ",");
+  print_fdset(nfds, &errorfdscpy);
+  cocosim_log_printf(LOG_DEBUG, ",");
+  cocosim_log_printf(LOG_DEBUG, "%d)\n", tvp);
 
   if (n != -1) {
     *ready = n;
