@@ -39,6 +39,10 @@
 #include <sys/sockio.h>
 #endif /* __APPLE__ || __FreeBSD__ */
 
+// Config
+#define COCOSIM_NS_PID_FILE_PATH "/tmp/cocosim_ns_pid"
+bool useNS3 = true;
+
 // list
 typedef struct socket_list_node {
   ddsrt_socket_t v;
@@ -69,7 +73,7 @@ inline void print(socket_list sl){
   cocosim_log_printf(LOG_INFO,"\n");
 
 }
-#define COCOSIM_NS_PID_FILE_PATH "/tmp/cocosim_ns_pid"
+
 bool connectedToNS3 = false;
 char* namespace = NULL;
 
@@ -110,7 +114,7 @@ void cocosim_log(int level, const char* format, ...){
 dds_return_t
 ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 {
-  if (!connectedToNS3) {
+  if (useNS3 && !connectedToNS3) {
     FILE* fp = fopen(COCOSIM_NS_PID_FILE_PATH,"r");
     if (!fp) {
       cocosim_log(LOG_FATAL, "Failed opening %s", COCOSIM_NS_PID_FILE_PATH);
@@ -170,6 +174,8 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
       cocosim_log(LOG_INFO, "ns3_start_service()\n");
       ns3_start_service();
       connectedToNS3 = true;
+    }else{
+      useNS3 = false;
     }
   }
 
@@ -178,7 +184,7 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
   assert(sockptr != NULL);
 
   cocosim_log(LOG_DEBUG, "socket type = %d\n", type);
-  if(namespace && type == SOCK_DGRAM){
+  if(useNS3 && type == SOCK_DGRAM){
     sock = ns3_socket(domain, type, protocol, namespace);
     insert(&ns3_sockets, sock);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
@@ -239,7 +245,7 @@ ddsrt_bind(
   socklen_t addrlen)
 {
   int rc;
-  if(namespace && find(ns3_sockets, sock)){
+  if(useNS3 && find(ns3_sockets, sock)){
     ((struct sockaddr_in*) addr)->sin_addr.s_addr = htonl (INADDR_ANY);
     rc = ns3_bind(sock, addr, addrlen);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
@@ -390,7 +396,7 @@ ddsrt_getsockname(
   socklen_t *addrlen)
 {
     int rc;
-    if(namespace && find(ns3_sockets, sock)){
+    if(useNS3 && find(ns3_sockets, sock)){
       rc = ns3_getsockname(sock, addr, addrlen);
       cocosim_log(LOG_DEBUG, "[ns-3] ");
     }else{
@@ -426,7 +432,7 @@ ddsrt_getsockopt(
   socklen_t *optlen)
 {
   int rc;
-  if(namespace && find(ns3_sockets, sock)){
+  if(useNS3 && find(ns3_sockets, sock)){
     rc = -2; // fail with DDS_RETCODE_BAD_PARAMETER
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
@@ -477,7 +483,7 @@ ddsrt_setsockopt(
 
 
   int rc;
-  if(namespace && find(ns3_sockets, sock)){
+  if(useNS3 && find(ns3_sockets, sock)){
     rc = 0; // do nothing
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
@@ -497,7 +503,7 @@ ddsrt_setsockopt(
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
   if (level == SOL_SOCKET && optname == SO_REUSEADDR) {
-    if(namespace && find(ns3_sockets, sock)){
+    if(useNS3 && find(ns3_sockets, sock)){
       rc = 0; // do nothing
       cocosim_log(LOG_DEBUG, "[ns-3] ");
     }else{
@@ -630,7 +636,7 @@ ddsrt_recvmsg(
   ssize_t *rcvd)
 {
     ssize_t n;
-    if(namespace && find(ns3_sockets, sock)){
+    if(useNS3 && find(ns3_sockets, sock)){
       n = ns3_recvmsg(sock, msg, flags);
       cocosim_log(LOG_DEBUG, "[ns-3] ");
     }else{
@@ -719,7 +725,7 @@ ddsrt_sendmsg(
   ssize_t *sent)
 {
   ssize_t n;
-  if(namespace && find(ns3_sockets, sock)){
+  if(useNS3 && find(ns3_sockets, sock)){
     n = ns3_sendmsg(sock, msg, flags);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
@@ -753,7 +759,7 @@ ddsrt_select(
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
 
-  if(namespace){ // if namespace existis -> all sockets are managed by ns-3
+  if(useNS3){ // if using NS3 -> all sockets are managed by ns-3 (TODO improve)
     n = ns3_select(nfds, readfds, writefds, errorfds, tvp);
     cocosim_log(LOG_DEBUG, "[ns-3] ");
   }else{
