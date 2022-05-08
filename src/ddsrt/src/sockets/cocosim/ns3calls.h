@@ -133,7 +133,7 @@ ssize_t ns3_sendto(int sockfd, const void *buf, size_t len, int flags,
     return res.ret; 
 }
 
-ssize_t ns3_sendmsg(int sockfd, struct msghdr *msg, int flags) {
+ssize_t ns3_sendmsg(int sockfd, const struct msghdr *msg, int flags) {
     ssize_t ret = 0;
     for (int i = 0; i < msg->msg_iovlen; i++) {
         ret += ns3_sendto(sockfd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len,
