@@ -46,7 +46,7 @@ extern const struct in6_addr ddsrt_in6addr_loopback;
 
 // configuration 
 #define DEBUG_STREAM stderr
-#define DEBUG_LEVEL (LOG_FATAL | LOG_ERROR | LOG_WARN | LOG_INFO | LOG_DEBUG)
+#define DEBUG_LEVEL (LOG_FATAL | LOG_ERROR | LOG_WARN | LOG_INFO | LOG_DEBUG | LOG_DEBUG2)
 
 // declaration
 DDS_EXPORT void
