@@ -239,7 +239,7 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
       }
       int pid = atoi(token);
 
-      if (pid == getpid() || pid == getapid(2)){ // also allow if it's the pid of the grandparent process (to use gdb)
+      if (pid == getpid() || pid == getppid() || pid == getapid(2)){ // also allow if it's the pid of the grandparent process (to use gdb)
         // parse namespace or name if there is no namespace 
         token = strsep(&it, delim);
         if (!token) { 
