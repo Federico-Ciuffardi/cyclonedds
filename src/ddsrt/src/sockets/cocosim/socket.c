@@ -260,7 +260,6 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 
     if(namespace) {
       cocosim_log(LOG_INFO, "ns3_start_service()\n");
-      ns3_start_service();
       connectedToNS3 = true;
     }else{
       useNS3 = false;
