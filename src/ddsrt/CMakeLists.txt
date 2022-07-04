@@ -87,6 +87,7 @@ endforeach()
 
 target_include_directories(
   ddsrt INTERFACE
+    "/usr/lib" # pick up ns3service lib
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>")
 

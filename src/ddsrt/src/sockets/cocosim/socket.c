@@ -18,7 +18,7 @@
 #include "dds/ddsrt/misc.h"
 #include "dds/ddsrt/sockets.h"
 #include "dds/ddsrt/sockets_priv.h"
-#include "ns3calls.h"
+#include <ns3service/calls.h>
 #include <stdio.h>
 #include <stdlib.h>
 
