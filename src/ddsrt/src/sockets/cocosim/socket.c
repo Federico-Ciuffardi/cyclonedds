@@ -261,8 +261,15 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
     if(namespace) {
       cocosim_log(LOG_INFO, "ns3_start_service()\n");
       connectedToNS3 = true;
+      char* ccsh_nococosim = getenv("CCSH_NOCOCOSIM");
+      useNS3 = !ccsh_nococosim || strcmp(ccsh_nococosim,"true") != 0;
     }else{
       useNS3 = false;
+    }
+    if(useNS3){
+      cocosim_log(LOG_INFO,"CoCoSim enabled\n");
+    }else{
+      cocosim_log(LOG_INFO,"CoCoSim disabled\n");
     }
   }
 
