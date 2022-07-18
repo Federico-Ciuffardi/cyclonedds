@@ -141,7 +141,11 @@ list(APPEND sources
   "${source_path}/hopscotch.c"
   "${source_path}/thread_pool.c"
   "${source_path}/xmlparser.c"
-  "${source_path}/circlist.c")
+  "${source_path}/circlist.c"
+  "${source_path}/cocosim/log.c"
+  "${source_path}/cocosim/socklist.c"
+  "${source_path}/cocosim/socklist.c"
+  "${source_path}/cocosim/ros.c")
 
 # Not every target offers the same set of features. For embedded targets the
 # set of features may even be different between builds. e.g. a FreeRTOS build

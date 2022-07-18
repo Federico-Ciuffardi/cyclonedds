@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "dds/cocosim/log.h"
 #include "dds/ddsrt/sockets.h"
 #include "dds/ddsrt/string.h"
 

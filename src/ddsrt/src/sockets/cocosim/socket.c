@@ -14,6 +14,9 @@
 #include <unistd.h>
 #include <math.h>
 
+#include "dds/cocosim/log.h"
+#include "dds/cocosim/ros.h"
+#include "dds/cocosim/socklist.h"
 #include "dds/ddsrt/log.h"
 #include "dds/ddsrt/misc.h"
 #include "dds/ddsrt/sockets.h"
@@ -43,222 +46,24 @@
 ////////////
 // Config //
 ////////////
-#define COCOSIM_NS_PID_FILE_PATH "/tmp/cocosim_ns_pid"
 bool useNS3 = true;
-
-/////////////////////////
-// ddsrt_socket_t list //
-/////////////////////////
-typedef struct socket_list_node {
-  ddsrt_socket_t v;
-  struct socket_list_node *next;
-} socket_list_node;
-
-typedef struct socket_list_node* socket_list;
-
-inline void insert(socket_list *sl,ddsrt_socket_t v){
-  socket_list new = (socket_list) malloc(sizeof(socket_list_node));
-  new->next = *sl;
-  new->v = v;
-  *sl = new;
-}
-
-inline bool find(socket_list sl, ddsrt_socket_t v){
-  socket_list it;
-  for(it = sl; it != NULL && it->v != v; it=it->next);
-  return it != NULL;
-}
-
-inline void print(socket_list sl){
-  socket_list it;
-  cocosim_log(LOG_INFO,"Sock list:");
-  for(it = sl; it != NULL; it=it->next){
-    cocosim_log_printf(LOG_INFO,"=%d", it->v);
-  }
-  cocosim_log_printf(LOG_INFO,"\n");
-}
-
-/////////
-// log //
-/////////
-void vcocosim_log_printf(int level, const char* format, va_list args){
-  if (level & DEBUG_LEVEL) {
-    vfprintf(DEBUG_STREAM, format, args);
-  }
-}
-
-void cocosim_log_printf(int level, const char* format, ...){
-  if (level & DEBUG_LEVEL) {
-    va_list(args);
-    va_start(args, format);
-    vfprintf(DEBUG_STREAM, format, args); // same as vcocosim_log_printf, avoid overhead
-    va_end(args);
-  }
-}
-
-void vcocosim_log(int level, const char* format, va_list args){
-  if (level & DEBUG_LEVEL) {
-    char levelstr[6];
-    switch (level) {
-      case LOG_FATAL : strcpy(levelstr,"FATAL"); break;
-      case LOG_ERROR : strcpy(levelstr,"ERROR"); break;
-      case LOG_WARN  : strcpy(levelstr,"WARN "); break;
-      case LOG_INFO  : strcpy(levelstr,"INFO "); break;
-      case LOG_DEBUG : strcpy(levelstr,"DEBUG"); break;
-      default        : strcpy(levelstr,"?????"); break;
-    }
-    fprintf(DEBUG_STREAM,"CCS_%s: ",levelstr);
-    vfprintf(DEBUG_STREAM, format, args); // same as vcocosim_log_printf, avoid overhead
-    fflush(DEBUG_STREAM);
-  }
-}
-
-void cocosim_log(int level, const char* format, ...){
-  if (level & DEBUG_LEVEL) {
-    va_list(args);
-    va_start(args, format);
-    vcocosim_log(level, format, args);
-    va_end(args);
-    fflush(DEBUG_STREAM);
-  }
-}
-
-bool cocosim_log_call_init(bool to_ns3, int* ret, const char* format, ...){
-  if (LOG_DEBUG & DEBUG_LEVEL && (LOG_DEBUG2 & DEBUG_LEVEL || !ret)) {
-    if(to_ns3){
-      cocosim_log(LOG_DEBUG, "[ns-3] ");
-    }else{
-      cocosim_log(LOG_DEBUG, "[posix] ");
-    }
-    if(ret){
-      fprintf(DEBUG_STREAM, "%d = ", *ret);
-    }
-    va_list(args);
-    va_start(args, format);
-    vfprintf(DEBUG_STREAM, format, args); // same as vcocosim_log_printf, avoid overhead
-    va_end(args);
-    return true;
-  }else{
-    return false;
-  }
-}
-
-///////////
-// Utils //
-///////////
-/* Get the process ID of the calling process's nth ancestor.  */
-inline pid_t getapid(int n) {
-  pid_t pid = getpid();
-
-  while(n>0 && pid){ // process with pid 0 has no parent
-
-    // strlen("/proc/") == 6
-    // max [pid] for 64 bits is 4194304 then strlen("[pid]") < 7
-    // strlen("/stat") == 5
-    // then strlen("/proc/[pid]/stat") < 6 + 7 + 5
-    char proc_stat_path[6+7+5+1];
-    sprintf(proc_stat_path, "/proc/%d/stat", pid);
-
-    // open "/proc/<pid>/stat"
-    FILE *fh = fopen(proc_stat_path, "r");
-    if (fh == NULL) {
-      fprintf(stderr, "Failed opening %s: ", proc_stat_path);
-      perror("");
-      exit(1);
-    }
-
-    // seek to last ')'
-    int c;
-    long pos = 0;
-    while ((c = fgetc(fh)) != EOF) {
-      if (c == ')')
-        pos = ftell(fh);
-    }
-    fseek(fh, pos, SEEK_SET);
-
-    // get parent 
-    fscanf(fh, " %*c %d", &pid);
-
-    // close "/proc/<pid>/stat"
-    fclose(fh);
-
-    // decrement n
-    n--;
-  }
-
-  if(n>0)
-    return -1;
-  else
-    return pid;
-}
 
 //////////
 // main //
 //////////
 bool connectedToNS3 = false;
-char* namespace = NULL;
+char* ns = NULL;
 
-socket_list ns3_sockets = NULL;
-
+socklist ns3_sockets = NULL;
 
 dds_return_t
 ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 {
   if (useNS3 && !connectedToNS3) {
-    FILE* fp = fopen(COCOSIM_NS_PID_FILE_PATH,"r");
-    if (!fp) {
-      cocosim_log(LOG_FATAL, "Failed opening %s", COCOSIM_NS_PID_FILE_PATH);
-      perror("");
-      exit(EXIT_FAILURE);
-    }
+    get_ns(&ns);
+    cocosim_log(LOG_INFO, "ns: %s\n",ns);
 
-    const char delim[2] = ":";
-    char* line = NULL;
-    size_t len = 0;
-    sleep(5); // wait for initialization (TODO sync properly)
-    while (getline(&line, &len, fp) != -1) {
-      // remove white spaces
-      size_t i = 0;
-      size_t k = 0;
-      while(i+k < len){
-        if(line[i+k] == ' '){
-          k++;
-        }else{
-          line[i] = line[i+k];
-          i++;
-        }
-      }
-      line[i] = '\0';
-
-      // parse pid
-      char* it = line;
-      char* token = strsep(&it, delim);
-      if (!token) { 
-        cocosim_log(LOG_FATAL, "Failed parsing pid from %s\n", it);
-        exit(EXIT_FAILURE);
-      }
-      int pid = atoi(token);
-
-      if (pid == getpid() || pid == getppid() || pid == getapid(2)){ // also allow if it's the pid of the grandparent process (to use gdb)
-        // parse namespace or name if there is no namespace 
-        token = strsep(&it, delim);
-        if (!token) { 
-          cocosim_log(LOG_FATAL, "Failed parsing namespace %s\n", it);
-          exit(EXIT_FAILURE);
-        }
-        if (*token != '\0'){
-          namespace = strdup(token);
-        }
-        break;
-      }
-    }
-
-    fclose(fp);
-    free(line); 
-
-    cocosim_log(LOG_INFO, "namespace: %s\n",namespace);
-
-    if(namespace) {
+    if(ns) {
       cocosim_log(LOG_INFO, "ns3_start_service()\n");
       connectedToNS3 = true;
       char* ccsh_nococosim = getenv("CCSH_NOCOCOSIM");
@@ -280,7 +85,7 @@ ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
   bool to_ns3 = useNS3 && type == SOCK_DGRAM;
   cocosim_log_call_init(to_ns3, NULL, "socket(%d, %d, %d)\n", domain, type, protocol);
   if(to_ns3){
-    sock = ns3_socket(domain, type, protocol, namespace);
+    sock = ns3_socket(domain, type, protocol, ns);
     insert(&ns3_sockets, sock);
   }else{
     sock = socket(domain, type, protocol);
