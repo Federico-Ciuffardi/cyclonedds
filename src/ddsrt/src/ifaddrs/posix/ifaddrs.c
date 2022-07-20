@@ -187,6 +187,7 @@ ddsrt_getifaddrs(
     afs = os_supp_afs;
   }
 
+  printf("[ip] getifaddrs\n");
   if (getifaddrs(&sys_ifa_root) == -1) {
     switch (errno) {
       case EACCES:

@@ -295,6 +295,7 @@ ddsrt_gethostbyname(const char *name, int af, ddsrt_hostent_t **hentp)
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = af;
 
+  printf("[ip] getaddrinfo\n");
   gai_err = getaddrinfo(name, NULL, &hints, &res);
   /* gai_strerror cannot be used because Windows does not offer a thread-safe
      implementation and lwIP (there maybe others as well) does not offer an
@@ -384,6 +385,8 @@ ddsrt_gethostbyname(const char *name, int af, ddsrt_hostent_t **hentp)
   struct hostent hest, *he;
   char buf[256];
   int err;
+
+  printf("[ip] gethostbyname_r\n");
   he = gethostbyname_r (name, &hest, buf, sizeof (buf), &err);
   if (he == NULL) {
     return DDS_RETCODE_HOST_NOT_FOUND;

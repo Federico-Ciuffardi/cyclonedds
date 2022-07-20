@@ -1105,6 +1105,7 @@ int rtps_init (struct ddsi_domaingv *gv)
       break;
   }
 
+  printf("[ip] find_own_ip\n");
   if (!find_own_ip (gv, gv->config.networkAddressString))
   {
     /* find_own_ip already logs a more informative error message */

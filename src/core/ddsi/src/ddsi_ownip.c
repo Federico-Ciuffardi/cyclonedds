@@ -71,6 +71,7 @@ int find_own_ip (struct ddsi_domaingv *gv, const char *requested_address)
 
   {
     int ret;
+    printf("[ip] ddsi_enumerate_interfaces\n");
     ret = ddsi_enumerate_interfaces(gv->m_factory, gv->config.transport_selector, &ifa_root);
     if (ret < 0) {
       GVERROR ("ddsi_enumerate_interfaces(%s): %d\n", gv->m_factory->m_typename, ret);

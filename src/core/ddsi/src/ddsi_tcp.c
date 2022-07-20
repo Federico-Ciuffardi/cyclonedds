@@ -1170,6 +1170,7 @@ int ddsi_tcp_init (struct ddsi_domaingv *gv)
   fact->fact.m_free_fn = ddsi_tcp_release_factory;
   fact->fact.m_locator_from_string_fn = ddsi_tcp_address_from_string;
   fact->fact.m_locator_to_string_fn = ddsi_ipaddr_to_string;
+  printf("[ip] m_enumerate_interfaces_fn = ddsi_eth_enumerate_interfaces\n");
   fact->fact.m_enumerate_interfaces_fn = ddsi_eth_enumerate_interfaces;
   fact->fact.m_is_mcaddr_fn = ddsi_tcp_is_mcaddr;
   fact->fact.m_is_ssm_mcaddr_fn = ddsi_tcp_is_ssm_mcaddr;

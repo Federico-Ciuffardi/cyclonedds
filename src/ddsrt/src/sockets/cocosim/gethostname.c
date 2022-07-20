@@ -60,8 +60,10 @@ ddsrt_gethostname(
 
   memset(buf, 0, sizeof(buf));
 
-  cocosim_log(LOG_DEBUG, "DDS | gethostname(_, %d)\n", /*buf,*/ HOST_NAME_MAX);
-  if (gethostname(buf, HOST_NAME_MAX) == 0) {
+  cocosim_log(LOG_DEBUG, "[ip] gethostname(_, %d)\n", /*buf,*/ HOST_NAME_MAX);
+  int rt = gethostname(buf, HOST_NAME_MAX);
+  cocosim_log(LOG_DEBUG, "[ip] %d = gethostname(%s, %d)\n", rt, buf, HOST_NAME_MAX);
+  if (rt == 0) {
     /* If truncation occurrs, no error is returned whether or not the buffer
        is null-terminated. */
     if (buf[HOST_NAME_MAX - 1] != '\0' ||

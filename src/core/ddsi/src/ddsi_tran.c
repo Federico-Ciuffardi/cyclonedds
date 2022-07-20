@@ -335,5 +335,7 @@ char *ddsi_locator_to_string_no_port (char *dst, size_t sizeof_dst, const nn_loc
 
 int ddsi_enumerate_interfaces (ddsi_tran_factory_t factory, enum transport_selector transport_selector, ddsrt_ifaddrs_t **interfs)
 {
+
+  printf("[ip] m_enumerate_interfaces_fn\n");
   return factory->m_enumerate_interfaces_fn (factory, transport_selector, interfs);
 }

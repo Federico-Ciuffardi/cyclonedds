@@ -26,5 +26,6 @@ int ddsi_eth_enumerate_interfaces (ddsi_tran_factory_t fact, enum transport_sele
     }
 #endif /* DDSRT_HAVE_IPV6 */
 
+    printf("[ip] ddsrt_getifaddrs\n");
     return ddsrt_getifaddrs(ifs, afs);
 }

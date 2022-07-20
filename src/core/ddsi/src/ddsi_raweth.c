@@ -353,6 +353,7 @@ static int ddsi_raweth_enumerate_interfaces (ddsi_tran_factory_t fact, enum tran
   int afs[] = { AF_PACKET, DDSRT_AF_TERM };
   (void)fact;
   (void)transport_selector;
+  printf("[ip] ddsrt_getifaddrs\n");
   return ddsrt_getifaddrs(ifs, afs);
 }
 

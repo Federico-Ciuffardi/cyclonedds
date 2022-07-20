@@ -871,6 +871,7 @@ int ddsi_udp_init (struct ddsi_domaingv*gv)
   fact->fact.m_is_nearby_address_fn = ddsi_ipaddr_is_nearby_address;
   fact->fact.m_locator_from_string_fn = ddsi_udp_address_from_string;
   fact->fact.m_locator_to_string_fn = ddsi_udp_locator_to_string;
+  printf("[ip] m_enumerate_interfaces_fn = ddsi_eth_enumerate_interfaces\n");
   fact->fact.m_enumerate_interfaces_fn = ddsi_eth_enumerate_interfaces;
   fact->fact.m_is_valid_port_fn = ddsi_udp_is_valid_port;
   fact->fact.m_receive_buffer_size_fn = ddsi_udp_receive_buffer_size;
