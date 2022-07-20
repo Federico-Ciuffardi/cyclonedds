@@ -14,6 +14,12 @@
 #include <ifaddrs.h>
 #include <string.h>
 
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include "dds/cocosim/ros.h"
 #include "dds/ddsrt/heap.h"
 #include "dds/ddsrt/ifaddrs.h"
 #include "dds/ddsrt/retcode.h"
@@ -204,18 +210,35 @@ ddsrt_getifaddrs(
   } else {
     ifa = ifa_root = NULL;
 
+    char* ns = NULL;
+    get_ns(&ns);
+
     for (sys_ifa = sys_ifa_root;
          sys_ifa != NULL && err == 0;
          sys_ifa = sys_ifa->ifa_next)
     {
       sa = sys_ifa->ifa_addr;
+
       if (sa != NULL) {
         use = 0;
+        // es valida la familia
         for (int i = 0; !use && afs[i] != DDSRT_AF_TERM; i++) {
           use = (sa->sa_family == afs[i]);
         }
 
         if (use) {
+          if (ns && strcmp(sys_ifa->ifa_name, "lo") != 0){
+            if(strcmp(ns,"box_bot1")==0){
+              ((struct sockaddr_in*) sa)->sin_addr.s_addr = inet_addr("10.1.1.1");
+            }else{
+              ((struct sockaddr_in*) sa)->sin_addr.s_addr = inet_addr("10.1.1.2");
+            }
+          }
+
+          printf("sys_ifa->ifa_name  = %s\n", sys_ifa->ifa_name);
+          printf("sys_ifa->ifa_flags = %u\n", sys_ifa->ifa_flags);
+          printf("sa->sa_family = %u\n", sa->sa_family);
+          printf("sys_ifa->ifa_addr  = %s\n", inet_ntoa(((struct sockaddr_in*) sa)->sin_addr));
           enum ddsrt_iftype type = guess_iftype (sys_ifa);
           err = copyaddr(&ifa_next, sys_ifa, type);
           if (err == DDS_RETCODE_OK) {
