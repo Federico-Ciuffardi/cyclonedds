@@ -210,6 +210,7 @@ ddsrt_getifaddrs(
   } else {
     ifa = ifa_root = NULL;
 
+    // FIXME
     char* ns = NULL;
     get_ns(&ns);
 
@@ -218,14 +219,13 @@ ddsrt_getifaddrs(
          sys_ifa = sys_ifa->ifa_next)
     {
       sa = sys_ifa->ifa_addr;
-
       if (sa != NULL) {
         use = 0;
-        // es valida la familia
         for (int i = 0; !use && afs[i] != DDSRT_AF_TERM; i++) {
           use = (sa->sa_family == afs[i]);
         }
 
+        // FIXME
         if (use) {
           if (ns && strcmp(sys_ifa->ifa_name, "lo") != 0){
             if(strcmp(ns,"box_bot1")==0){
@@ -233,12 +233,17 @@ ddsrt_getifaddrs(
             }else{
               ((struct sockaddr_in*) sa)->sin_addr.s_addr = inet_addr("10.1.1.2");
             }
+            ((struct sockaddr_in*) sys_ifa->ifa_netmask)->sin_addr.s_addr = inet_addr("255.255.255.0"); 
+            ((struct sockaddr_in*) sys_ifa->ifa_broadaddr)->sin_addr.s_addr = inet_addr("10.1.1.255"); 
           }
 
-          printf("sys_ifa->ifa_name  = %s\n", sys_ifa->ifa_name);
-          printf("sys_ifa->ifa_flags = %u\n", sys_ifa->ifa_flags);
-          printf("sa->sa_family = %u\n", sa->sa_family);
-          printf("sys_ifa->ifa_addr  = %s\n", inet_ntoa(((struct sockaddr_in*) sa)->sin_addr));
+          printf("sys_ifa->ifa_name      = %s\n", sys_ifa->ifa_name);
+          printf("sys_ifa->ifa_flags     = %u\n", sys_ifa->ifa_flags);
+          printf("sys_ifa->sa_family     = %u\n", sa->sa_family);
+          printf("sys_ifa->ifa_addr      = %s\n", inet_ntoa(((struct sockaddr_in*) sys_ifa->ifa_addr)->sin_addr));
+          printf("sys_ifa->ifa_netmask   = %s\n", inet_ntoa(((struct sockaddr_in*) sys_ifa->ifa_netmask)->sin_addr));
+          printf("sys_ifa->ifa_broadaddr = %s\n", inet_ntoa(((struct sockaddr_in*) sys_ifa->ifa_broadaddr)->sin_addr));
+
           enum ddsrt_iftype type = guess_iftype (sys_ifa);
           err = copyaddr(&ifa_next, sys_ifa, type);
           if (err == DDS_RETCODE_OK) {
