@@ -11,13 +11,15 @@
  */
 #include "dds/ddsrt/ifaddrs.h"
 
-#if DDSRT_WITH_LWIP
-# if LWIP_SOCKET
-#   error "cmake_HAVE_IFADDRS=lwip"
-# else
-#   error "cmake_HAVE_IFADDRS=false"
-# endif
-#else
-# error "cmake_HAVE_IFADDRS=true"
-#endif
+# error "cmake_HAVE_IFADDRS=cocosim"
+
+/* #if DDSRT_WITH_LWIP */
+/* # if LWIP_SOCKET */
+/* #   error "cmake_HAVE_IFADDRS=lwip" */
+/* # else */
+/* #   error "cmake_HAVE_IFADDRS=false" */
+/* # endif */
+/* #else */
+/* # error "cmake_HAVE_IFADDRS=true" */
+/* #endif */
 
