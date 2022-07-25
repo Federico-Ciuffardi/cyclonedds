@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "dds/cocosim/ros.h"
 #include "dds/cocosim/log.h"
 #include "dds/ddsrt/sockets.h"
 #include "dds/ddsrt/string.h"
@@ -56,14 +57,25 @@ ddsrt_gethostname(
   char *name,
   size_t len)
 {
-  char buf[HOST_NAME_MAX + 1 /* '\0' */];
+  int rc;
 
+  char buf[HOST_NAME_MAX + 1 /* '\0' */];
   memset(buf, 0, sizeof(buf));
 
-  cocosim_log(LOG_DEBUG, "[ip] gethostname(_, %d)\n", /*buf,*/ HOST_NAME_MAX);
-  int rt = gethostname(buf, HOST_NAME_MAX);
-  cocosim_log(LOG_DEBUG, "[ip] %d = gethostname(%s, %d)\n", rt, buf, HOST_NAME_MAX);
-  if (rt == 0) {
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  cocosim_log_call_init(ccs_enabled, NULL, "gethostname(_, %d)\n", /*buf,*/ len);
+  if (ccs_enabled){
+    rc = 0;
+    char* ns;
+    get_ns(&ns);
+    strncpy(buf, ns, len);
+  }else{
+    rc = gethostname(buf, HOST_NAME_MAX);
+  }
+  cocosim_log_call_init(ccs_enabled, &rc, "gethostname(%s, %d)\n", buf, len);
+
+  if (rc == 0) {
     /* If truncation occurrs, no error is returned whether or not the buffer
        is null-terminated. */
     if (buf[HOST_NAME_MAX - 1] != '\0' ||
