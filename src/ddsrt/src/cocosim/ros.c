@@ -1,5 +1,15 @@
 #include "dds/cocosim/ros.h"
 
+
+pthread_mutex_t useNS3_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t ns_mutex     = PTHREAD_MUTEX_INITIALIZER;
+
+bool ccs_enabled;
+bool ccs_enabledft = true;
+
+char* ns   = NULL;
+bool  nsft = true;
+
 pid_t getapid(int n) {
   pid_t pid = getpid();
 
@@ -45,55 +55,94 @@ pid_t getapid(int n) {
     return pid;
 }
 
-void get_ns(char** ns) {
-  FILE* fp = fopen(COCOSIM_NS_PID_FILE_PATH,"r");
-  if (!fp) {
-    cocosim_log(LOG_FATAL, "Failed opening %s", COCOSIM_NS_PID_FILE_PATH);
-    perror("");
-    exit(EXIT_FAILURE);
+void get_ccs_enabled(bool* _ccs_enabled) {
+  pthread_mutex_lock(&useNS3_mutex);
+
+  if (ccs_enabledft) {
+    char* ns = NULL;
+    get_ns(&ns);
+    cocosim_log(LOG_INFO, "ns: %s\n",ns);
+
+    if(ns) {
+      char* ccsh_nococosim = getenv("CCSH_NOCOCOSIM");
+      ccs_enabled = !ccsh_nococosim || strcmp(ccsh_nococosim,"true") != 0;
+    }else{
+      ccs_enabled = false;
+    }
+
+    if(ccs_enabled){
+      cocosim_log(LOG_INFO,"CoCoSim enabled\n");
+    }else{
+      cocosim_log(LOG_INFO,"CoCoSim disabled\n");
+    }
+
+    ccs_enabledft = false;
   }
 
-  const char delim[2] = ":";
-  char* line = NULL;
-  size_t len = 0;
-  sleep(5); // wait for initialization (TODO sync properly)
-  while (getline(&line, &len, fp) != -1) {
-    // remove white spaces
-    size_t i = 0;
-    size_t k = 0;
-    while(i+k < len){
-      if(line[i+k] == ' '){
-        k++;
-      }else{
-        line[i] = line[i+k];
-        i++;
-      }
-    }
-    line[i] = '\0';
+  *_ccs_enabled = ccs_enabled;
+  pthread_mutex_unlock(&useNS3_mutex);
+}
 
-    // parse pid
-    char* it = line;
-    char* token = strsep(&it, delim);
-    if (!token) { 
-      cocosim_log(LOG_FATAL, "Failed parsing pid from %s\n", it);
+void get_ns(char** _ns) {
+  pthread_mutex_lock(&ns_mutex);
+    
+  if(nsft){
+    FILE* fp = fopen(COCOSIM_NS_PID_FILE_PATH,"r");
+    if (!fp) {
+      cocosim_log(LOG_FATAL, "Failed opening %s", COCOSIM_NS_PID_FILE_PATH);
+      perror("");
       exit(EXIT_FAILURE);
     }
-    int pid = atoi(token);
 
-    if (pid == getpid() || pid == getppid() || pid == getapid(2)){ // also allow if it's the pid of the grandparent process (to use gdb)
-      // parse ns or name if there is no ns 
-      token = strsep(&it, delim);
+    const char delim[2] = ":";
+    char* line = NULL;
+    size_t len = 0;
+
+    sleep(5); // wait for initialization (TODO sync properly)
+
+    while (getline(&line, &len, fp) != -1) {
+      // remove white spaces
+      size_t i = 0;
+      size_t k = 0;
+      while(i+k < len){
+        if(line[i+k] == ' '){
+          k++;
+        }else{
+          line[i] = line[i+k];
+          i++;
+        }
+      }
+      line[i] = '\0';
+
+      // parse pid
+      char* it = line;
+      char* token = strsep(&it, delim);
       if (!token) { 
-        cocosim_log(LOG_FATAL, "Failed parsing ns %s\n", it);
+        cocosim_log(LOG_FATAL, "Failed parsing pid from %s\n", it);
         exit(EXIT_FAILURE);
       }
-      if (*token != '\0'){
-        *ns = strdup(token);
+      int pid = atoi(token);
+
+      if (pid == getpid() || pid == getppid() || pid == getapid(2)){ // also allow if it's the pid of the grandparent process (to use gdb)
+        // parse ns or name if there is no ns 
+        token = strsep(&it, delim);
+        if (!token) { 
+          cocosim_log(LOG_FATAL, "Failed parsing ns %s\n", it);
+          exit(EXIT_FAILURE);
+        }
+        if (*token != '\0'){
+          ns = strdup(token);
+        }
+        break;
       }
-      break;
     }
+
+    fclose(fp);
+    free(line); 
+
+    nsft = false;
   }
 
-  fclose(fp);
-  free(line); 
+  *_ns = ns;
+  pthread_mutex_unlock(&ns_mutex);
 }

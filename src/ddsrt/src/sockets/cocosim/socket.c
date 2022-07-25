@@ -43,54 +43,28 @@
 #include <sys/sockio.h>
 #endif /* __APPLE__ || __FreeBSD__ */
 
-////////////
-// Config //
-////////////
-bool useNS3 = true;
-
-//////////
-// main //
-//////////
-bool connectedToNS3 = false;
-char* ns = NULL;
-
-socklist ns3_sockets = NULL;
-
 dds_return_t
 ddsrt_socket(ddsrt_socket_t *sockptr, int domain, int type, int protocol)
 {
-  if (useNS3 && !connectedToNS3) {
-    get_ns(&ns);
-    cocosim_log(LOG_INFO, "ns: %s\n",ns);
-
-    if(ns) {
-      cocosim_log(LOG_INFO, "ns3_start_service()\n");
-      connectedToNS3 = true;
-      char* ccsh_nococosim = getenv("CCSH_NOCOCOSIM");
-      useNS3 = !ccsh_nococosim || strcmp(ccsh_nococosim,"true") != 0;
-    }else{
-      useNS3 = false;
-    }
-    if(useNS3){
-      cocosim_log(LOG_INFO,"CoCoSim enabled\n");
-    }else{
-      cocosim_log(LOG_INFO,"CoCoSim disabled\n");
-    }
-  }
-
   ddsrt_socket_t sock;
 
   assert(sockptr != NULL);
+  if(type != SOCK_DGRAM){
+    cocosim_log(LOG_FATAL, "socket type %d not supported\n", type );
+    exit(1);
+  }
 
-  bool to_ns3 = useNS3 && type == SOCK_DGRAM;
-  cocosim_log_call_init(to_ns3, NULL, "socket(%d, %d, %d)\n", domain, type, protocol);
-  if(to_ns3){
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  cocosim_log_call_init(ccs_enabled, NULL, "socket(%d, %d, %d)\n", domain, type, protocol);
+  if(ccs_enabled){
+    char *ns;
+    get_ns(&ns);
     sock = ns3_socket(domain, type, protocol, ns);
-    insert(&ns3_sockets, sock);
   }else{
     sock = socket(domain, type, protocol);
   }
-  cocosim_log_call_init(to_ns3, &sock, "socket(%d, %d, %d)\n", domain, type, protocol);
+  cocosim_log_call_init(ccs_enabled, &sock, "socket(%d, %d, %d)\n", domain, type, protocol);
 
   if (sock != -1) {
     *sockptr = sock;
@@ -143,15 +117,16 @@ ddsrt_bind(
 {
   int rc;
 
-  bool to_ns3 = useNS3 && find(ns3_sockets, sock);
-  cocosim_log_call_init(to_ns3, NULL, "bind(%d,%s,%d)\n", sock, inet_ntoa(((struct sockaddr_in*) addr)->sin_addr), addrlen);
-  if(to_ns3){
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  cocosim_log_call_init(ccs_enabled, NULL, "bind(%d,%s,%d)\n", sock, inet_ntoa(((struct sockaddr_in*) addr)->sin_addr), addrlen);
+  if(ccs_enabled){
     ((struct sockaddr_in*) addr)->sin_addr.s_addr = htonl (INADDR_ANY);
     rc = ns3_bind(sock, addr, addrlen);
   }else{
     rc = bind(sock, addr, addrlen);
   }
-  cocosim_log_call_init(to_ns3, &rc, "bind(%d,%s,%d)\n", sock, inet_ntoa(((struct sockaddr_in*) addr)->sin_addr), addrlen);
+  cocosim_log_call_init(ccs_enabled, &rc, "bind(%d,%s,%d)\n", sock, inet_ntoa(((struct sockaddr_in*) addr)->sin_addr), addrlen);
 
   if (rc == 0)
     return DDS_RETCODE_OK;
@@ -295,14 +270,15 @@ ddsrt_getsockname(
 {
     int rc;
 
-    bool to_ns3 = useNS3 && find(ns3_sockets, sock);
-    cocosim_log_call_init(to_ns3, NULL, "getsockname(%d,_,_)\n", sock);
-    if(to_ns3){
+    bool ccs_enabled;
+    get_ccs_enabled(&ccs_enabled);
+    cocosim_log_call_init(ccs_enabled, NULL, "getsockname(%d,_,_)\n", sock);
+    if(ccs_enabled){
       rc = ns3_getsockname(sock, addr, addrlen);
     }else{
       rc = getsockname(sock, addr, addrlen);
     }
-    cocosim_log_call_init(to_ns3, &rc, "getsockname(%d,_,_)\n", sock);
+    cocosim_log_call_init(ccs_enabled, &rc, "getsockname(%d,_,_)\n", sock);
 
     if (rc == 0)
       return DDS_RETCODE_OK;
@@ -332,14 +308,15 @@ ddsrt_getsockopt(
 {
   int rc;
 
-  bool to_ns3 = useNS3 && find(ns3_sockets, sock);
-  cocosim_log_call_init(to_ns3, NULL, "getsockopt(%d,%d,%d,_,_)\n", sock, level, optname);
-  if(to_ns3){
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  cocosim_log_call_init(ccs_enabled, NULL, "getsockopt(%d,%d,%d,_,_)\n", sock, level, optname);
+  if(ccs_enabled){
     rc = -2; // fail with DDS_RETCODE_BAD_PARAMETER
   }else{
     rc = getsockopt(sock, level, optname, optval, optlen);
   }
-  cocosim_log_call_init(to_ns3, &rc, "getsockopt(%d,%d,%d,_,_)\n", sock, level, optname);
+  cocosim_log_call_init(ccs_enabled, &rc, "getsockopt(%d,%d,%d,_,_)\n", sock, level, optname);
 
   if (rc == 0)
     return DDS_RETCODE_OK;
@@ -390,14 +367,15 @@ ddsrt_setsockopt(
     ptr += sprintf(ptr, "%02x", ((unsigned char*) optval)[i]);
   }
 
-  bool to_ns3 = useNS3 && find(ns3_sockets, sock);
-  cocosim_log_call_init(to_ns3, NULL, "setsockopt(%d,%d,%d,0x%s,%d)\n", sock, level, optname, optvalhexa, optlen);
-  if(to_ns3){
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  cocosim_log_call_init(ccs_enabled, NULL, "setsockopt(%d,%d,%d,0x%s,%d)\n", sock, level, optname, optvalhexa, optlen);
+  if(ccs_enabled){
     rc = 0; // do nothing
   }else{
     rc = setsockopt(sock, level, optname, optval, optlen);
   }
-  cocosim_log_call_init(to_ns3, &rc, "setsockopt(%d,%d,%d,0x%s,%d)\n", sock, level, optname, optvalhexa, optlen);
+  cocosim_log_call_init(ccs_enabled, &rc, "setsockopt(%d,%d,%d,0x%s,%d)\n", sock, level, optname, optvalhexa, optlen);
 
   if (rc == -1) {
     goto err_setsockopt;
@@ -539,9 +517,10 @@ ddsrt_recvmsg(
 {
     ssize_t n;
 
-    bool to_ns3 = useNS3 && find(ns3_sockets, sock);
-    cocosim_log_call_init(to_ns3, NULL, "recvmsg(%d,_,%d)\n", sock, flags);
-    if(to_ns3){
+    bool ccs_enabled;
+    get_ccs_enabled(&ccs_enabled);
+    cocosim_log_call_init(ccs_enabled, NULL, "recvmsg(%d,_,%d)\n", sock, flags);
+    if(ccs_enabled){
       n = ns3_recvmsg(sock, msg, flags);
     }else{
       n = recvmsg(sock, msg, flags);
@@ -633,15 +612,16 @@ ddsrt_sendmsg(
 {
   ssize_t n;
 
-  bool to_ns3 = useNS3 && find(ns3_sockets, sock);
-  cocosim_log_call_init(to_ns3, NULL, "sendmsg(%d,_,%d)\n", sock, flags);
-  if(to_ns3){
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  cocosim_log_call_init(ccs_enabled, NULL, "sendmsg(%d,_,%d)\n", sock, flags);
+  if(ccs_enabled){
     n = ns3_sendmsg(sock, msg, flags);
   }else{
     n = sendmsg(sock, msg, flags);
   }
   int n_int = (int) n;
-  cocosim_log_call_init(to_ns3, &n_int, "sendmsg(%d,_,%d)\n", sock, flags);
+  cocosim_log_call_init(ccs_enabled, &n_int, "sendmsg(%d,_,%d)\n", sock, flags);
 
   if (n != -1) {
     assert(n >= 0);
@@ -702,16 +682,17 @@ ddsrt_select(
 
   tvp = ddsrt_duration_to_timeval_ceil(reltime, &tv);
 
-  bool to_ns3 = useNS3; // if using NS3 -> all sockets are managed by ns-3 (TODO improve)
-  if( cocosim_log_call_init(to_ns3, NULL, "")){
+  bool ccs_enabled;
+  get_ccs_enabled(&ccs_enabled);
+  if( cocosim_log_call_init(ccs_enabled, NULL, "")){
     cocosim_log_select(nfds, readfds, writefds, errorfds, tvp);
   }
-  if(to_ns3){ 
+  if(ccs_enabled){ 
     n = ns3_select(nfds, readfds, writefds, errorfds, tvp);
   }else{
     n = select(nfds, readfds, writefds, errorfds, tvp);
   }
-  if( cocosim_log_call_init(to_ns3, &n, "")){
+  if( cocosim_log_call_init(ccs_enabled, &n, "")){
     cocosim_log_select(nfds, readfds, writefds, errorfds, tvp);
   }
 
