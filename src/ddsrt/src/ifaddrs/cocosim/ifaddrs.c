@@ -83,6 +83,7 @@ static enum ddsrt_iftype guess_iftype (const struct ifaddrs *sys_ifa)
     }
   }
   fclose (fp);
+  cocosim_log_call_init(false, (int*) &type, "guess_iftype(%s)\n", inet_ntoa(((struct sockaddr_in*) sys_ifa->ifa_broadaddr)->sin_addr));
   return type;
 }
 #elif defined __APPLE__ /* probably works for all BSDs */
@@ -210,7 +211,8 @@ ddsrt_getifaddrs(
   } else {
     ifa = ifa_root = NULL;
 
-    // FIXME
+    bool ccs_enabled; 
+    get_ccs_enabled(&ccs_enabled);
     char* ns = NULL;
     get_ns(&ns);
 
@@ -227,7 +229,7 @@ ddsrt_getifaddrs(
 
         // FIXME
         if (use) {
-          if (ns && strcmp(sys_ifa->ifa_name, "lo") != 0){
+          if (ccs_enabled && strcmp(sys_ifa->ifa_name, "lo") != 0){
             if(strcmp(ns,"box_bot1")==0){
               ((struct sockaddr_in*) sa)->sin_addr.s_addr = inet_addr("10.1.1.1");
             }else{
