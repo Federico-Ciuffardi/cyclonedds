@@ -7,7 +7,7 @@ pthread_mutex_t ns_mutex     = PTHREAD_MUTEX_INITIALIZER;
 bool ccs_enabled;
 bool ccs_enabledft = true;
 
-char* ns   = NULL;
+char* ns   = "localhost";
 bool  nsft = true;
 
 pid_t getapid(int n) {
@@ -63,12 +63,8 @@ void get_ccs_enabled(bool* _ccs_enabled) {
     get_ns(&ns);
     cocosim_log(LOG_INFO, "ns: %s\n",ns);
 
-    if(ns) {
-      char* ccsh_nococosim = getenv("CCSH_NOCOCOSIM");
-      ccs_enabled = !ccsh_nococosim || strcmp(ccsh_nococosim,"true") != 0;
-    }else{
-      ccs_enabled = false;
-    }
+    char* ccsh_nococosim = getenv("CCSH_NOCOCOSIM");
+    ccs_enabled = !ccsh_nococosim || strcmp(ccsh_nococosim,"true") != 0;
 
     if(ccs_enabled){
       cocosim_log(LOG_INFO,"CoCoSim enabled\n");

@@ -229,11 +229,14 @@ ddsrt_getifaddrs(
 
         // FIXME
         if (use) {
-          if (ccs_enabled && strcmp(sys_ifa->ifa_name, "lo") != 0){
+          if (ccs_enabled && strcmp(sys_ifa->ifa_name, "lo") != 0 && strcmp(ns,"localhost")){
             if(strcmp(ns,"box_bot1")==0){
               ((struct sockaddr_in*) sa)->sin_addr.s_addr = inet_addr("10.1.1.1");
-            }else{
+            }else if(strcmp(ns,"box_bot0")==0){
               ((struct sockaddr_in*) sa)->sin_addr.s_addr = inet_addr("10.1.1.2");
+            }else{
+              cocosim_log(LOG_FATAL,"IP for %s not available", ns);
+              exit(1);
             }
             ((struct sockaddr_in*) sys_ifa->ifa_netmask)->sin_addr.s_addr = inet_addr("255.255.255.0"); 
             ((struct sockaddr_in*) sys_ifa->ifa_broadaddr)->sin_addr.s_addr = inet_addr("10.1.1.255"); 
